@@ -146,9 +146,13 @@ function percent(value: number, total: number) {
   return total ? Math.round((value / total) * 100) : 0;
 }
 
-export default function AcademyApp() {
+type AcademyAppProps = {
+  initialSeed: number;
+};
+
+export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [view, setView] = useState<View>("table");
-  const [state, setState] = useState<GameState>(() => createGame());
+  const [state, setState] = useState<GameState>(() => createGame(initialSeed));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
   const [coachEnabled, setCoachEnabled] = useState(true);

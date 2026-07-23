@@ -1,0 +1,48 @@
+[Unit]
+Description=AIALRA Guandan scientific training platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aialra-guandan
+Group=aialra-guandan
+WorkingDirectory=/srv/aialra/apps/guandan/current/dist/server
+Environment=NODE_ENV=production
+Environment=NO_UPDATE_NOTIFIER=1
+Environment=WRANGLER_WRITE_LOGS=false
+ExecStart=/srv/aialra/apps/guandan/runtime/node_modules/.bin/wrangler dev --config /srv/aialra/apps/guandan/current/dist/server/wrangler.json --ip 127.0.0.1 --port 13100 --persist-to /srv/aialra/state/guandan/wrangler --show-interactive-dev-session false --log-level warn
+Restart=on-failure
+RestartSec=3s
+TimeoutStartSec=90s
+TimeoutStopSec=30s
+KillSignal=SIGINT
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ReadWritePaths=/srv/aialra/state/guandan /srv/aialra/apps/guandan/current/dist/server/.wrangler
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+TasksMax=160
+MemoryHigh=512M
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

@@ -39,12 +39,25 @@ async function ensureSchema() {
 }
 
 function userId(request: NextRequest): string | null {
-  const authenticated = request.headers
+  const sitesIdentity = request.headers
     .get("oai-authenticated-user-email")
     ?.trim()
     .toLowerCase()
     .slice(0, 254);
-  if (authenticated) return authenticated;
+  if (sitesIdentity) return `sites:${sitesIdentity}`;
+  const gatewayAuthenticated =
+    request.headers.get("x-aialra-authenticated") === "1";
+  const gatewaySubject = request.headers
+    .get("x-aialra-sub")
+    ?.trim()
+    .slice(0, 254);
+  if (
+    gatewayAuthenticated &&
+    gatewaySubject &&
+    /^[a-zA-Z0-9:_-]+$/.test(gatewaySubject)
+  ) {
+    return `aialra:${gatewaySubject}`;
+  }
   return process.env.NODE_ENV === "production" ? null : "local-preview";
 }
 
@@ -91,8 +104,21 @@ export async function POST(request: NextRequest) {
     );
   }
   const origin = request.headers.get("origin");
-  if (origin && origin !== request.nextUrl.origin) {
-    return NextResponse.json({ error: "请求来源无效" }, { status: 403 });
+  if (origin) {
+    let source: URL;
+    try {
+      source = new URL(origin);
+    } catch {
+      return NextResponse.json({ error: "请求来源无效" }, { status: 403 });
+    }
+    const requestHost = request.headers.get("host");
+    if (
+      !requestHost ||
+      source.host !== requestHost ||
+      (process.env.NODE_ENV === "production" && source.protocol !== "https:")
+    ) {
+      return NextResponse.json({ error: "请求来源无效" }, { status: 403 });
+    }
   }
   const body = (await request.json().catch(() => null)) as
     | {
