@@ -609,6 +609,67 @@ button:focus-visible {
   font-size: 10px;
 }
 
+.next-turn-cue {
+  display: grid;
+  width: 100%;
+  margin-top: 5px;
+  gap: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 6px;
+}
+
+.next-turn-cue small {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+}
+
+.next-turn-cue > i {
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: #f2cd70;
+  transform-origin: left;
+  animation: next-turn-progress linear forwards;
+}
+
+.next-turn-cue.pace-slow > i {
+  animation-duration: 3.4s;
+}
+
+.next-turn-cue.pace-standard > i {
+  animation-duration: 2.3s;
+}
+
+.next-turn-cue.pace-fast > i {
+  animation-duration: 1.4s;
+}
+
+.next-turn-cue button {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid rgba(242, 205, 112, 0.48);
+  border-radius: 8px;
+  background: rgba(242, 205, 112, 0.14);
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.next-turn-cue button,
+.playback-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.playback-action.active {
+  border-color: rgba(23, 79, 59, 0.24);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
 @keyframes action-arrived {
   from {
     opacity: 0;
@@ -618,6 +679,16 @@ button:focus-visible {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes next-turn-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
   }
 }
 
@@ -2595,6 +2666,10 @@ button:focus-visible {
   }
 
   .pace-control {
+    grid-column: 1 / -1;
+  }
+
+  .playback-action {
     grid-column: 1 / -1;
   }
 

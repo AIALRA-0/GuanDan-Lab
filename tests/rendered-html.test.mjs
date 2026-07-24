@@ -33,6 +33,9 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(javascript, /训练透视/);
   assert.match(javascript, /对局历史/);
   assert.match(javascript, /出牌节奏/);
+  assert.match(javascript, /暂停连播/);
+  assert.match(javascript, /播放/);
+  assert.match(javascript, /下一手/);
   assert.match(javascript, /为什么这样结算/);
   assert.match(javascript, /已知信息/);
   assert.match(javascript, /复盘本局/);
@@ -40,6 +43,8 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(css, /\.vision-drawer/);
   assert.match(css, /\.history-list/);
   assert.match(css, /\.action-announcer/);
+  assert.match(css, /\.next-turn-cue/);
+  assert.match(css, /next-turn-progress/);
   assert.match(css, /\.quiz-reasoning/);
   assert.match(css, /\.card-face\.is-selected:{1,2}after/);
   assert.match(css, /prefers-reduced-motion/);

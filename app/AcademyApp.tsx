@@ -11,6 +11,7 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
+  CirclePlay,
   Clock3,
   Eye,
   EyeOff,
@@ -121,9 +122,9 @@ const playbackPaceMeta: Record<
   PlaybackPace,
   { name: string; delay: number }
 > = {
-  slow: { name: "慢速讲解", delay: 2200 },
-  standard: { name: "标准节奏", delay: 1550 },
-  fast: { name: "快速演练", delay: 950 },
+  slow: { name: "慢速讲解", delay: 3400 },
+  standard: { name: "标准节奏", delay: 2300 },
+  fast: { name: "快速演练", delay: 1400 },
 };
 
 const topicDescriptions: Record<TrainingTopic, string> = {
@@ -152,6 +153,28 @@ function skillPercent(
   return skill?.attempted ? percent(skill.correct, skill.attempted) : fallback;
 }
 
+function advanceAiGame(current: GameState, difficulty: Difficulty): GameState {
+  if (current.currentSeat === 0 || current.winnerTeam !== undefined) {
+    return current;
+  }
+  const seat = current.currentSeat;
+  const choice = chooseAiMove(current, seat, difficulty);
+  try {
+    return choice.pattern
+      ? play(current, seat, choice.pattern)
+      : pass(current, seat);
+  } catch {
+    const fallback = scoreLegalMoves(current, seat, "master").find(
+      (candidate) => candidate.pattern
+    );
+    return fallback?.pattern
+      ? play(current, seat, fallback.pattern)
+      : current.target
+        ? pass(current, seat)
+        : current;
+  }
+}
+
 type AcademyAppProps = {
   initialSeed: number;
 };
@@ -163,6 +186,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
   const [playbackPace, setPlaybackPace] =
     useState<PlaybackPace>("standard");
+  const [autoPlayback, setAutoPlayback] = useState(true);
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coach, setCoach] = useState<DecisionExplanation | null>(null);
   const [coachQuestion, setCoachQuestion] =
@@ -371,35 +395,22 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   ]);
 
   useEffect(() => {
-    if (state.currentSeat === 0 || state.winnerTeam !== undefined) return;
+    if (
+      !autoPlayback ||
+      state.currentSeat === 0 ||
+      state.winnerTeam !== undefined
+    ) {
+      return;
+    }
     if (aiTimer.current) clearTimeout(aiTimer.current);
     aiTimer.current = setTimeout(() => {
-      setState((current) => {
-        if (current.currentSeat === 0 || current.winnerTeam !== undefined) {
-          return current;
-        }
-        const seat = current.currentSeat;
-        const choice = chooseAiMove(current, seat, difficulty);
-        try {
-          return choice.pattern
-            ? play(current, seat, choice.pattern)
-            : pass(current, seat);
-        } catch {
-          const fallback = scoreLegalMoves(current, seat, "master").find(
-            (candidate) => candidate.pattern
-          );
-          return fallback?.pattern
-            ? play(current, seat, fallback.pattern)
-            : current.target
-              ? pass(current, seat)
-              : current;
-        }
-      });
+      setState((current) => advanceAiGame(current, difficulty));
     }, playbackPaceMeta[playbackPace].delay);
     return () => {
       if (aiTimer.current) clearTimeout(aiTimer.current);
     };
   }, [
+    autoPlayback,
     difficulty,
     playbackPace,
     state.currentSeat,
@@ -656,6 +667,17 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                     </select>
                   </label>
                   <button
+                    className={`icon-action playback-action${
+                      autoPlayback ? " active" : ""
+                    }`}
+                    type="button"
+                    onClick={() => setAutoPlayback((enabled) => !enabled)}
+                    aria-pressed={autoPlayback}
+                  >
+                    {autoPlayback ? <Pause size={16} /> : <CirclePlay size={16} />}
+                    {autoPlayback ? "暂停连播" : "继续连播"}
+                  </button>
+                  <button
                     className={`icon-action vision-action${
                       trainingVision ? " active" : ""
                     }`}
@@ -727,6 +749,35 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                           ? "本轮没有跟牌，牌权继续向下传递"
                           : "你是本局先手，可以先查看推荐"}
                     </span>
+                    {state.winnerTeam === undefined &&
+                      state.currentSeat !== 0 && (
+                        <div
+                          className={`next-turn-cue pace-${playbackPace}`}
+                          key={`${state.turn}-${playbackPace}-${autoPlayback}`}
+                        >
+                          {autoPlayback ? (
+                            <>
+                              <small>
+                                下一位是{seatNames[state.currentSeat]} ·{" "}
+                                {playbackPaceMeta[playbackPace].name}
+                              </small>
+                              <i aria-hidden="true" />
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setState((current) =>
+                                  advanceAiGame(current, difficulty)
+                                )
+                              }
+                            >
+                              <CirclePlay size={14} />
+                              播放{seatNames[state.currentSeat]}下一手
+                            </button>
+                          )}
+                        </div>
+                      )}
                   </div>
                   <div className="played-pattern">
                     {state.target ? (
