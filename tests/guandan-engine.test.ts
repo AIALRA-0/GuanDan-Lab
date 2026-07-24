@@ -9,6 +9,7 @@ import {
 } from "../lib/guandan/patterns";
 import { chooseAiMove } from "../lib/guandan/strategy";
 import {
+  questionForSession,
   trainingBank,
   trainingBankStats,
   trainingDifficultyMeta,
@@ -308,5 +309,33 @@ describe("分层训练题库", () => {
       );
       expect(valid, question.id).toBe(true);
     }
+  });
+
+  it("每个难度只开放真实有题的主题", () => {
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      const typedDifficulty =
+        difficulty as keyof typeof trainingBankStats.byDifficultyAndTopic;
+      const total = Object.values(
+        trainingBankStats.byDifficultyAndTopic[typedDifficulty]
+      ).reduce((sum, count) => sum + count, 0);
+      expect(total).toBe(trainingBankStats.byDifficulty[typedDifficulty]);
+    }
+  });
+
+  it("一次训练会遍历完整题池后才重复", () => {
+    const pool = trainingBank.filter(
+      (question) => question.difficulty === "foundation"
+    );
+    for (const seed of [0, 1, 41, 2026]) {
+      const ids = Array.from({ length: pool.length }, (_, index) =>
+        questionForSession(pool, index, seed).id
+      );
+      expect(new Set(ids).size).toBe(pool.length);
+      expect(questionForSession(pool, pool.length, seed).id).toBe(ids[0]);
+    }
+  });
+
+  it("空题池不再悄悄回退到固定首题", () => {
+    expect(() => questionForSession([], 0, 1)).toThrow("训练题池不能为空");
   });
 });

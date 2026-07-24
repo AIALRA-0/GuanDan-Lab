@@ -1156,13 +1156,54 @@ export const trainingBankStats = {
       trainingBank.filter((question) => question.topic === topic).length,
     ])
   ) as Record<TrainingTopic, number>,
+  byDifficultyAndTopic: Object.fromEntries(
+    (Object.keys(trainingDifficultyMeta) as TrainingDifficulty[]).map(
+      (difficulty) => [
+        difficulty,
+        Object.fromEntries(
+          trainingTopics.map((topic) => [
+            topic,
+            trainingBank.filter(
+              (question) =>
+                question.difficulty === difficulty && question.topic === topic
+            ).length,
+          ])
+        ),
+      ]
+    )
+  ) as Record<TrainingDifficulty, Record<TrainingTopic, number>>,
 };
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+  while (b !== 0) {
+    [a, b] = [b, a % b];
+  }
+  return a;
+}
+
+function sessionStep(length: number, seed: number): number {
+  if (length <= 1) return 1;
+  let step = (Math.abs(seed) * 2 + 97) % length;
+  if (step === 0) step = 1;
+  while (greatestCommonDivisor(step, length) !== 1) {
+    step = (step + 1) % length || 1;
+  }
+  return step;
+}
 
 export function questionForSession(
   questions: TrainingQuestion[],
   index: number,
   seed: number
 ): TrainingQuestion {
-  if (questions.length === 0) return trainingBank[0];
-  return questions[(seed + index * 97) % questions.length];
+  if (questions.length === 0) {
+    throw new Error("训练题池不能为空");
+  }
+  const start =
+    ((seed % questions.length) + questions.length) % questions.length;
+  return questions[
+    (start + index * sessionStep(questions.length, seed)) % questions.length
+  ];
 }

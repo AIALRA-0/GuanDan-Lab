@@ -171,28 +171,37 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
       record.explanation?.quality === "精确" ||
       record.explanation?.quality === "稳健"
   ).length;
-  const filteredQuestions = useMemo(
+  const difficultyQuestions = useMemo(
     () =>
       trainingBank.filter(
+        (question) => question.difficulty === trainingDifficulty
+      ),
+    [trainingDifficulty]
+  );
+  const filteredQuestions = useMemo(
+    () =>
+      difficultyQuestions.filter(
         (question) =>
-          question.difficulty === trainingDifficulty &&
           (trainingTopic === "all" || question.topic === trainingTopic)
       ),
-    [trainingDifficulty, trainingTopic]
+    [difficultyQuestions, trainingTopic]
   );
+  const adaptiveQuestions =
+    filteredQuestions.length > 0 ? filteredQuestions : difficultyQuestions;
   const reviewQuestions = useMemo(() => {
     const ids = new Set(progress.reviewQuestionIds);
     return trainingBank.filter(
       (question) =>
         ids.has(question.id) &&
+        question.difficulty === trainingDifficulty &&
         (trainingTopic === "all" || question.topic === trainingTopic)
     );
-  }, [progress.reviewQuestionIds, trainingTopic]);
+  }, [progress.reviewQuestionIds, trainingDifficulty, trainingTopic]);
   const reviewEmpty = trainingMode === "review" && reviewQuestions.length === 0;
   const questionPool =
     trainingMode === "review" && !reviewEmpty
       ? reviewQuestions
-      : filteredQuestions;
+      : adaptiveQuestions;
   const currentQuiz = questionForSession(questionPool, quizIndex, quizSeed);
   const currentTip = trainingTopicTips[currentQuiz.topic];
 
@@ -360,10 +369,30 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
 
   const selectDifficulty = (next: TrainingDifficulty) => {
     setTrainingDifficulty(next);
+    if (
+      trainingTopic !== "all" &&
+      trainingBankStats.byDifficultyAndTopic[next][trainingTopic] === 0
+    ) {
+      setTrainingTopic("all");
+    }
     resetTrainingQuestion();
   };
 
   const selectTopic = (next: TrainingTopic | "all") => {
+    if (
+      next !== "all" &&
+      trainingBankStats.byDifficultyAndTopic[trainingDifficulty][next] === 0
+    ) {
+      const compatibleDifficulty = (
+        Object.keys(trainingDifficultyMeta) as TrainingDifficulty[]
+      ).find(
+        (difficulty) =>
+          trainingBankStats.byDifficultyAndTopic[difficulty][next] > 0
+      );
+      if (compatibleDifficulty) {
+        setTrainingDifficulty(compatibleDifficulty);
+      }
+    }
     setTrainingTopic(next);
     resetTrainingQuestion();
   };
@@ -767,11 +796,17 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                 }
               >
                 <option value="all">智能混合主题</option>
-                {trainingTopics.map((topic) => (
-                  <option value={topic} key={topic}>
-                    {topic} · {trainingBankStats.byTopic[topic]} 题
-                  </option>
-                ))}
+                {trainingTopics.map((topic) => {
+                  const count =
+                    trainingBankStats.byDifficultyAndTopic[trainingDifficulty][
+                      topic
+                    ];
+                  return (
+                    <option value={topic} key={topic} disabled={count === 0}>
+                      {topic} · {count > 0 ? `${count} 题` : "当前难度未开放"}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div className="control-group compact">
