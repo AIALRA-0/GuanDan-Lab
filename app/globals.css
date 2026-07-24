@@ -242,10 +242,12 @@ button:focus-visible {
 .table-panel,
 .coach-panel,
 .quiz-card,
-.module-stack > div,
+.training-module,
+.topic-tip,
+.training-dashboard > article,
 .analytics-card,
 .rule-card,
-.insight-metrics > div {
+.insight-metrics > article {
   border: 1px solid var(--line);
   background: rgba(255, 254, 250, 0.84);
   box-shadow: var(--shadow);
@@ -978,7 +980,156 @@ button:focus-visible {
 .training-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.75fr);
+  align-items: start;
   gap: 18px;
+}
+
+.training-dashboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.training-dashboard > article {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  min-height: 104px;
+  padding: 18px;
+  gap: 13px;
+  border-radius: 16px;
+}
+
+.training-dashboard > article > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.training-dashboard small,
+.training-dashboard p {
+  color: var(--ink-soft);
+}
+
+.training-dashboard strong {
+  display: block;
+  margin-top: 2px;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 24px;
+}
+
+.training-dashboard p {
+  margin: 3px 0 0;
+  font-size: 11px;
+}
+
+.training-controls {
+  display: grid;
+  grid-template-columns: minmax(480px, 1.5fr) minmax(190px, 0.55fr) minmax(230px, 0.65fr);
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 254, 250, 0.74);
+}
+
+.control-group {
+  min-width: 0;
+}
+
+.control-group > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.difficulty-tabs,
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.difficulty-tabs button,
+.mode-tabs button,
+.control-group select {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-strong);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.difficulty-tabs button {
+  padding: 8px 6px;
+}
+
+.difficulty-tabs strong,
+.difficulty-tabs small {
+  display: block;
+}
+
+.difficulty-tabs strong {
+  font-size: 12px;
+}
+
+.difficulty-tabs small {
+  margin-top: 3px;
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+.difficulty-tabs button.active,
+.mode-tabs button.active {
+  border-color: var(--green);
+  background: var(--green-deep);
+  color: #fff;
+}
+
+.difficulty-tabs button.active small {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.control-group select {
+  width: 100%;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.mode-tabs {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.mode-tabs button {
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.review-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(41, 126, 85, 0.24);
+  border-radius: 12px;
+  background: #eef7f0;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .quiz-card {
@@ -987,10 +1138,38 @@ button:focus-visible {
   border-radius: 24px;
 }
 
+.session-progress {
+  margin-bottom: 25px;
+}
+
+.session-progress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.session-progress > div:last-child {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 99px;
+  background: #e1e3dc;
+}
+
+.session-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+  transition: width 280ms ease;
+}
+
 .quiz-head {
   display: flex;
   align-items: start;
   justify-content: space-between;
+  gap: 18px;
 }
 
 .quiz-head span {
@@ -1013,8 +1192,32 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.quiz-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topic-badge {
+  padding: 8px 10px;
+  border: 1px solid rgba(23, 79, 59, 0.22);
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green) !important;
+  font-weight: 800;
+}
+
+.quiz-context {
+  margin: 25px 0 0;
+  padding-left: 11px;
+  border-left: 2px solid var(--gold);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
 .quiz-prompt {
-  margin: 32px 0 22px;
+  margin: 17px 0 22px;
   font-size: 18px;
   font-weight: 700;
   line-height: 1.6;
@@ -1029,6 +1232,64 @@ button:focus-visible {
 
 .quiz-cards .card-face + .card-face {
   margin-left: -17px;
+}
+
+.scenario-board {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  min-height: 118px;
+  padding: 22px;
+  gap: 14px;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(208, 174, 76, 0.2), transparent 28%),
+    var(--green-deep);
+  color: #fff;
+}
+
+.scenario-board > span {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.scenario-board p {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+}
+
+.scenario-board small {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 10px;
+}
+
+.hint-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin-top: 13px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.hint-button:hover,
+.hint-button.active {
+  border-color: rgba(23, 79, 59, 0.2);
+  background: var(--green-soft);
 }
 
 .quiz-options {
@@ -1125,20 +1386,31 @@ button:focus-visible {
   gap: 10px;
 }
 
-.module-stack > div {
+.training-module,
+.topic-tip {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
+  width: 100%;
   gap: 12px;
   padding: 19px;
   border-radius: 16px;
+  color: var(--ink);
+  text-align: left;
 }
 
-.module-stack > div.active {
+.training-module {
+  align-items: center;
+  cursor: pointer;
+}
+
+.training-module:hover,
+.training-module.active {
   border-color: rgba(23, 79, 59, 0.4);
   background: #eef4ef;
 }
 
-.module-stack > div > span {
+.training-module > span,
+.topic-tip > span {
   display: grid;
   width: 40px;
   height: 40px;
@@ -1146,6 +1418,26 @@ button:focus-visible {
   border-radius: 11px;
   background: var(--green-soft);
   color: var(--green);
+}
+
+.topic-tip {
+  grid-template-columns: auto 1fr;
+  border-color: rgba(206, 168, 57, 0.36);
+  background: #fff9e8;
+}
+
+.topic-tip > span {
+  background: #f4e9bd;
+  color: #755615;
+}
+
+.topic-tip ol {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 11px;
 }
 
 .module-stack h3,
@@ -1174,7 +1466,7 @@ button:focus-visible {
   margin-bottom: 18px;
 }
 
-.insight-metrics > div {
+.insight-metrics > article {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
@@ -1421,6 +1713,14 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .training-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .training-controls .control-group:first-child {
+    grid-column: 1 / -1;
+  }
+
   .coach-panel {
     display: grid;
     grid-template-columns: 280px 1fr;
@@ -1442,21 +1742,20 @@ button:focus-visible {
 
 @media (max-width: 900px) {
   .site-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
   }
 
   .main-nav {
-    position: fixed;
-    z-index: 60;
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
+    position: static;
+    min-width: 0;
+    justify-self: center;
     justify-content: space-around;
-    box-shadow: 0 12px 38px rgba(15, 37, 28, 0.25);
+    box-shadow: 0 8px 24px rgba(15, 37, 28, 0.1);
   }
 
   .header-rating {
-    grid-column: 2;
+    grid-column: auto;
   }
 
   .hero-strip {
@@ -1470,6 +1769,10 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .training-dashboard {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .insight-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1479,16 +1782,19 @@ button:focus-visible {
   }
 
   .site-footer {
-    margin-bottom: 68px;
+    margin-bottom: 0;
   }
 }
 
 @media (max-width: 680px) {
   .site-header {
+    grid-template-columns: 1fr;
     min-height: 62px;
+    padding: 7px 10px;
   }
 
-  .brand small {
+  .brand,
+  .header-rating {
     display: none;
   }
 
@@ -1497,6 +1803,7 @@ button:focus-visible {
   }
 
   .main-nav {
+    width: 100%;
     overflow-x: auto;
   }
 
@@ -1593,9 +1900,60 @@ button:focus-visible {
     display: block;
   }
 
+  .content-page {
+    padding-top: 34px;
+  }
+
+  .training-controls {
+    grid-template-columns: 1fr;
+    padding: 11px;
+  }
+
+  .training-controls .control-group:first-child {
+    grid-column: auto;
+  }
+
+  .difficulty-tabs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .training-dashboard {
+    gap: 8px;
+  }
+
+  .training-dashboard > article {
+    min-height: 92px;
+    padding: 13px;
+  }
+
+  .training-dashboard strong {
+    font-size: 20px;
+  }
+
   .quiz-card {
     min-height: auto;
     padding: 22px 16px;
+  }
+
+  .quiz-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .quiz-badges {
+    order: -1;
+  }
+
+  .quiz-cards {
+    overflow-x: auto;
+  }
+
+  .scenario-board {
+    grid-template-columns: auto 1fr;
+  }
+
+  .scenario-board > small {
+    grid-column: 2;
   }
 
   .quiz-options,

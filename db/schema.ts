@@ -1,4 +1,10 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+} from "drizzle-orm/sqlite-core";
 
 export const learnerProgress = sqliteTable("learner_progress", {
   userId: text("user_id").primaryKey(),
@@ -27,4 +33,30 @@ export const learningEvents = sqliteTable(
       table.createdAt
     ),
   ]
+);
+
+export const trainingSkillProgress = sqliteTable(
+  "training_skill_progress",
+  {
+    userId: text("user_id").notNull(),
+    skill: text("skill").notNull(),
+    attempted: integer("attempted").notNull().default(0),
+    correct: integer("correct").notNull().default(0),
+    due: integer("due").notNull().default(0),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.skill] })]
+);
+
+export const trainingReviewQueue = sqliteTable(
+  "training_review_queue",
+  {
+    userId: text("user_id").notNull(),
+    questionId: text("question_id").notNull(),
+    topic: text("topic").notNull(),
+    difficulty: text("difficulty").notNull(),
+    misses: integer("misses").notNull().default(1),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.questionId] })]
 );

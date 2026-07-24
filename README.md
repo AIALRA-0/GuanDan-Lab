@@ -10,7 +10,8 @@
 - 逢人配、炸弹层级、接风与名次结算
 - 三档可解释 AI 对手
 - 每手牌的原因、后果、搭档视角与备选方案
-- 牌型、搭档、记牌与残局专项训练
+- 1,900 道分层题，覆盖十类专项能力
+- 四级难度、渐进提示、错题回炉与能力画像
 - Cloudflare D1 学习进度
 - 桌面端与移动端响应式牌桌
 
@@ -41,9 +42,9 @@ npm run test:render
 
 - 正式入口 `https://guandan.aialra.online`
 - 入口由 AIALRA Authentik 统一身份中心保护
-- 应用仅监听服务器回环地址 `127.0.0.1:13100`
-- 学习进度保存在 `/srv/aialra/state/guandan/wrangler`
-- systemd 服务名为 `aialra-guandan.service`
+- 应用服务只监听服务器回环地址
+- 学习进度使用持久化 D1 兼容存储
+- 仓库不包含密码、令牌、数据库、备份或服务器身份文件
 
 生产构建使用单包 Worker 模式，避免 Linux Wrangler 多模块直载差异
 
@@ -51,19 +52,4 @@ npm run test:render
 npm run build:vps
 ```
 
-部署脚本位于 `deploy/`
-
-- `install-vps.sh` 安装只读发布版本、运行时和持久化状态
-- `prepare-hostname.sh` 启用域名并签发或复用 TLS 证书
-- `configure-auth-nginx.sh` 接入 Authentik、身份网关和 Nginx
-
-发布后至少执行以下检查
-
-```bash
-systemctl is-active aialra-guandan.service
-curl -I https://guandan.aialra.online
-HOST_UNDER_TEST=guandan.aialra.online \
-EXPECTED_APP_SLUG=guandan \
-RETURN_PATH=/ \
-/srv/aialra/apps/auth-gateway/test_oidc_flow.sh
-```
+服务器专用部署模板位于 `deploy/`，所有凭据均由目标环境在部署时注入

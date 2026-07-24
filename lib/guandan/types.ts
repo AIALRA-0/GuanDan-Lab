@@ -112,5 +112,14 @@ export interface ProgressSummary {
   trainingCompleted: number;
   rating: number;
   streak: number;
+  questionsAnswered: number;
+  questionsCorrect: number;
+  reviewDue: number;
+  reviewQuestionIds: string[];
+  skills: Array<{
+    skill: string;
+    attempted: number;
+    correct: number;
+    due: number;
+  }>;
 }
-

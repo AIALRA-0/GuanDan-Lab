@@ -8,6 +8,12 @@ import {
   legalPatterns,
 } from "../lib/guandan/patterns";
 import { chooseAiMove } from "../lib/guandan/strategy";
+import {
+  trainingBank,
+  trainingBankStats,
+  trainingDifficultyMeta,
+  trainingTopics,
+} from "../lib/guandan/training";
 import { Card, CardRank, GameState, Pattern, Rank, Suit } from "../lib/guandan/types";
 
 let id = 0;
@@ -253,5 +259,54 @@ describe("AI 合法性与性能", () => {
     const elapsed = performance.now() - started;
     expect(total).toBeGreaterThan(100);
     expect(elapsed).toBeLessThan(2500);
+  });
+});
+
+describe("分层训练题库", () => {
+  it("题库达到三个原始题目的两个至三个数量级扩充", () => {
+    expect(trainingBank.length).toBeGreaterThanOrEqual(1500);
+    expect(trainingBankStats.total).toBe(trainingBank.length);
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      expect(
+        trainingBankStats.byDifficulty[
+          difficulty as keyof typeof trainingBankStats.byDifficulty
+        ]
+      ).toBeGreaterThanOrEqual(300);
+    }
+    for (const topic of trainingTopics) {
+      expect(trainingBankStats.byTopic[topic]).toBeGreaterThanOrEqual(100);
+    }
+  });
+
+  it("题目编号与选项稳定且没有重复答案", () => {
+    expect(new Set(trainingBank.map((question) => question.id)).size).toBe(
+      trainingBank.length
+    );
+    for (const question of trainingBank) {
+      expect(question.options).toHaveLength(4);
+      expect(new Set(question.options).size, question.id).toBe(4);
+      expect(question.answer).toBeGreaterThanOrEqual(0);
+      expect(question.answer).toBeLessThan(4);
+      expect(question.options[question.answer]).toBeTruthy();
+      expect(question.hint.length).toBeGreaterThan(6);
+      expect(question.explanation.length).toBeGreaterThan(8);
+    }
+  });
+
+  it("所有带牌型标注的题目都能由正式规则引擎验证", () => {
+    const patternQuestions = trainingBank.filter(
+      (question) => question.expectedPatternType
+    );
+    expect(patternQuestions.length).toBeGreaterThanOrEqual(300);
+    for (const question of patternQuestions) {
+      const selected = new Set(question.cards.map((candidate) => candidate.id));
+      const valid = enumeratePatterns(question.cards, question.level).some(
+        (pattern) =>
+          pattern.type === question.expectedPatternType &&
+          pattern.cards.length === question.cards.length &&
+          pattern.cards.every((candidate) => selected.has(candidate.id))
+      );
+      expect(valid, question.id).toBe(true);
+    }
   });
 });

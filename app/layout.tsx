@@ -31,8 +31,8 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [
         {
           url: image,
-          width: 1731,
-          height: 909,
+          width: 1727,
+          height: 911,
           alt: "贯策科学掼蛋训练系统",
         },
       ],

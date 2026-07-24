@@ -4,19 +4,25 @@ import {
   Activity,
   ArrowRight,
   BarChart3,
+  BookMarked,
   BookOpen,
   Bot,
   BrainCircuit,
   Check,
   ChevronRight,
   CircleHelp,
+  Clock3,
+  Flame,
   Gauge,
   Hand,
+  Layers3,
   Lightbulb,
   Medal,
   Pause,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Target,
   Trophy,
@@ -36,15 +42,23 @@ import {
 } from "@/lib/guandan/game";
 import { chooseAiMove, explainMove, publicSituation, scoreLegalMoves } from "@/lib/guandan/strategy";
 import {
-  Card,
   DecisionExplanation,
   Difficulty,
   GameState,
   ProgressSummary,
-  Rank,
   Seat,
 } from "@/lib/guandan/types";
 import { seatTeam } from "@/lib/guandan/cards";
+import {
+  questionForSession,
+  trainingBank,
+  trainingBankStats,
+  trainingDifficultyMeta,
+  trainingTopics,
+  trainingTopicTips,
+  TrainingDifficulty,
+  TrainingTopic,
+} from "@/lib/guandan/training";
 
 type View = "table" | "training" | "insights" | "rules";
 
@@ -70,6 +84,11 @@ const emptyProgress: ProgressSummary = {
   trainingCompleted: 0,
   rating: 800,
   streak: 0,
+  questionsAnswered: 0,
+  questionsCorrect: 0,
+  reviewDue: 0,
+  reviewQuestionIds: [],
+  skills: [],
 };
 
 const difficultyMeta: Record<
@@ -81,69 +100,30 @@ const difficultyMeta: Record<
   master: { name: "大师推演", description: "优先团队收益和残局控制", speed: 420 },
 };
 
-const demoCards = (
-  specs: Array<[Card["suit"], Card["rank"]]>
-): Card[] =>
-  specs.map(([suit, rank], index) => ({
-    id: `demo-${index}-${suit}-${rank}`,
-    suit,
-    rank,
-    deck: (index % 2) as 0 | 1,
-  }));
-
-const quizzes = [
-  {
-    title: "逢人配识别",
-    prompt: "本局打 7，这组牌最准确的牌型是什么",
-    level: "7" as Rank,
-    cards: demoCards([
-      ["spades", "9"],
-      ["diamonds", "9"],
-      ["clubs", "9"],
-      ["hearts", "7"],
-    ]),
-    options: ["四张 9 炸弹", "三张 9", "三带一", "四张散牌"],
-    answer: 0,
-    explanation:
-      "红桃级牌可以替代一张 9，三张自然 9 加一张逢人配组成四张炸弹",
-    principle: "先识别万能牌的最高价值用途，再比较是否值得现在暴露炸弹",
-  },
-  {
-    title: "搭档牌权",
-    prompt: "搭档刚用 K 对取得牌权，下家还剩 8 张，你手里有 A 对，通常应当怎么做",
-    level: "6" as Rank,
-    cards: demoCards([
-      ["spades", "A"],
-      ["hearts", "A"],
-      ["clubs", "4"],
-      ["diamonds", "5"],
-    ]),
-    options: ["用 A 对盖住搭档", "过牌让搭档继续", "直接拆 A 出单张", "立即使用炸弹"],
-    answer: 1,
-    explanation:
-      "下家尚未进入紧急张数，搭档已经控制本轮，主动盖牌通常只会浪费己方控制牌",
-    principle: "掼蛋不是四个独立玩家，牌权属于团队而不是某一只手",
-  },
-  {
-    title: "残局拦截",
-    prompt: "下家只剩 2 张且刚出一对 Q，你能用级牌对压住，此时优先级是什么",
-    level: "8" as Rank,
-    cards: demoCards([
-      ["spades", "8"],
-      ["diamonds", "8"],
-      ["spades", "4"],
-      ["clubs", "4"],
-    ]),
-    options: ["保留级牌永远更重要", "立即拦截，避免对手走完", "过牌等待搭档", "拆成四张单牌"],
-    answer: 1,
-    explanation:
-      "对手已经进入一手走完区间，阻断终局的价值高于常规的控制牌保留",
-    principle: "同一张牌的价值随剩余张数剧烈变化，残局必须重估",
-  },
-] as const;
+const topicDescriptions: Record<TrainingTopic, string> = {
+  牌型识别: "先把合法性判断练成直觉",
+  逢人配: "衡量万能牌的结构机会成本",
+  牌权控制: "夺权前先写清下一手出口",
+  搭档协同: "从出牌和张数读取伙伴意图",
+  记牌推理: "只追踪会改变决策的关键信息",
+  炸弹管理: "把炸弹当作终局控制资源",
+  残局处理: "识别一手走完与接风窗口",
+  进贡还贡: "用最低结构损失完成交换",
+  组牌规划: "比较整手牌的出完路径",
+  风险判断: "同时计算收益和失败代价",
+};
 
 function percent(value: number, total: number) {
   return total ? Math.round((value / total) * 100) : 0;
+}
+
+function skillPercent(
+  progress: ProgressSummary,
+  topic: TrainingTopic,
+  fallback: number
+) {
+  const skill = progress.skills.find((item) => item.skill === topic);
+  return skill?.attempted ? percent(skill.correct, skill.attempted) : fallback;
 }
 
 type AcademyAppProps = {
@@ -161,6 +141,19 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [progress, setProgress] = useState<ProgressSummary>(emptyProgress);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizAnswer, setQuizAnswer] = useState<number | null>(null);
+  const [trainingDifficulty, setTrainingDifficulty] =
+    useState<TrainingDifficulty>("foundation");
+  const [trainingTopic, setTrainingTopic] = useState<TrainingTopic | "all">(
+    "all"
+  );
+  const [trainingMode, setTrainingMode] = useState<"adaptive" | "review">(
+    "adaptive"
+  );
+  const [quizSeed, setQuizSeed] = useState(initialSeed);
+  const [hintVisible, setHintVisible] = useState(false);
+  const [sessionAttempted, setSessionAttempted] = useState(0);
+  const [sessionCorrect, setSessionCorrect] = useState(0);
+  const [sessionStreak, setSessionStreak] = useState(0);
   const recordedSeed = useRef<number | null>(null);
   const aiTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -178,6 +171,30 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
       record.explanation?.quality === "精确" ||
       record.explanation?.quality === "稳健"
   ).length;
+  const filteredQuestions = useMemo(
+    () =>
+      trainingBank.filter(
+        (question) =>
+          question.difficulty === trainingDifficulty &&
+          (trainingTopic === "all" || question.topic === trainingTopic)
+      ),
+    [trainingDifficulty, trainingTopic]
+  );
+  const reviewQuestions = useMemo(() => {
+    const ids = new Set(progress.reviewQuestionIds);
+    return trainingBank.filter(
+      (question) =>
+        ids.has(question.id) &&
+        (trainingTopic === "all" || question.topic === trainingTopic)
+    );
+  }, [progress.reviewQuestionIds, trainingTopic]);
+  const reviewEmpty = trainingMode === "review" && reviewQuestions.length === 0;
+  const questionPool =
+    trainingMode === "review" && !reviewEmpty
+      ? reviewQuestions
+      : filteredQuestions;
+  const currentQuiz = questionForSession(questionPool, quizIndex, quizSeed);
+  const currentTip = trainingTopicTips[currentQuiz.topic];
 
   useEffect(() => {
     let cancelled = false;
@@ -306,14 +323,21 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const submitQuiz = (answer: number) => {
     if (quizAnswer !== null) return;
     setQuizAnswer(answer);
-    const correct = answer === quizzes[quizIndex].answer;
+    const correct = answer === currentQuiz.answer;
+    setSessionAttempted((value) => value + 1);
+    setSessionCorrect((value) => value + (correct ? 1 : 0));
+    setSessionStreak((value) => (correct ? value + 1 : 0));
     fetch("/api/progress", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         kind: "training",
-        module: quizzes[quizIndex].title,
+        module: currentQuiz.title,
         score: correct ? 100 : 45,
+        questionId: currentQuiz.id,
+        skill: currentQuiz.topic,
+        difficulty: currentQuiz.difficulty,
+        correct,
       }),
     })
       .then((response) => (response.ok ? response.json() : null))
@@ -322,8 +346,31 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   };
 
   const nextQuiz = () => {
-    setQuizIndex((index) => (index + 1) % quizzes.length);
+    setQuizIndex((index) => index + 1);
     setQuizAnswer(null);
+    setHintVisible(false);
+  };
+
+  const resetTrainingQuestion = () => {
+    setQuizIndex(0);
+    setQuizSeed((seed) => seed + 41);
+    setQuizAnswer(null);
+    setHintVisible(false);
+  };
+
+  const selectDifficulty = (next: TrainingDifficulty) => {
+    setTrainingDifficulty(next);
+    resetTrainingQuestion();
+  };
+
+  const selectTopic = (next: TrainingTopic | "all") => {
+    setTrainingTopic(next);
+    resetTrainingQuestion();
+  };
+
+  const selectTrainingMode = (next: "adaptive" | "review") => {
+    setTrainingMode(next);
+    resetTrainingQuestion();
   };
 
   return (
@@ -652,36 +699,181 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
         <section className="content-page">
           <PageIntro
             eyebrow="专项训练"
-            title="把薄弱点拆成可以重复练习的动作"
-            description="牌型、搭档、记牌、残局和手数规划分别训练，不靠机械刷局"
+            title="从会打到会判断，每一步都有训练路径"
+            description={`${trainingBankStats.total.toLocaleString("zh-CN")} 道分层题覆盖规则、组牌、协同、记牌与残局，答错自动进入回炉`}
           />
+          <div className="training-dashboard">
+            <TrainingStat
+              icon={<BookMarked size={18} />}
+              label="科学题库"
+              value={trainingBankStats.total.toLocaleString("zh-CN")}
+              detail="规则引擎可验证"
+            />
+            <TrainingStat
+              icon={<Target size={18} />}
+              label="累计正确率"
+              value={`${percent(
+                progress.questionsCorrect,
+                progress.questionsAnswered
+              )}%`}
+              detail={`${progress.questionsAnswered} 次作答`}
+            />
+            <TrainingStat
+              icon={<Flame size={18} />}
+              label="本轮连对"
+              value={sessionStreak}
+              detail={`${sessionCorrect} / ${sessionAttempted} 正确`}
+            />
+            <TrainingStat
+              icon={<RotateCcw size={18} />}
+              label="待回炉"
+              value={progress.reviewDue}
+              detail="答对后自动移出"
+            />
+          </div>
+
+          <div className="training-controls">
+            <div className="control-group">
+              <span>
+                <Layers3 size={15} />
+                难度
+              </span>
+              <div className="difficulty-tabs">
+                {(Object.keys(
+                  trainingDifficultyMeta
+                ) as TrainingDifficulty[]).map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    className={trainingDifficulty === item ? "active" : ""}
+                    onClick={() => selectDifficulty(item)}
+                  >
+                    <strong>{trainingDifficultyMeta[item].name}</strong>
+                    <small>{trainingDifficultyMeta[item].description}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="control-group compact">
+              <span>
+                <SlidersHorizontal size={15} />
+                训练范围
+              </span>
+              <select
+                aria-label="训练主题"
+                value={trainingTopic}
+                onChange={(event) =>
+                  selectTopic(event.target.value as TrainingTopic | "all")
+                }
+              >
+                <option value="all">智能混合主题</option>
+                {trainingTopics.map((topic) => (
+                  <option value={topic} key={topic}>
+                    {topic} · {trainingBankStats.byTopic[topic]} 题
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="control-group compact">
+              <span>
+                <RotateCcw size={15} />
+                训练模式
+              </span>
+              <div className="mode-tabs">
+                <button
+                  type="button"
+                  className={trainingMode === "adaptive" ? "active" : ""}
+                  onClick={() => selectTrainingMode("adaptive")}
+                >
+                  智能训练
+                </button>
+                <button
+                  type="button"
+                  className={trainingMode === "review" ? "active" : ""}
+                  onClick={() => selectTrainingMode("review")}
+                >
+                  错题回炉 {progress.reviewDue || ""}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {reviewEmpty && (
+            <div className="review-empty" role="status">
+              <Check size={18} />
+              当前范围没有待回炉题，已临时展示同级智能训练
+            </div>
+          )}
+
           <div className="training-layout">
             <div className="quiz-card">
+              <div className="session-progress">
+                <div>
+                  <span>今日一组 12 题</span>
+                  <strong>{Math.min(sessionAttempted, 12)} / 12</strong>
+                </div>
+                <div>
+                  <i
+                    style={{
+                      width: `${Math.min(100, (sessionAttempted / 12) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
               <div className="quiz-head">
                 <div>
                   <span>
-                    第 {quizIndex + 1} 题 / {quizzes.length}
+                    第 {(quizIndex % Math.max(1, questionPool.length)) + 1} 题
+                    {" · "}
+                    当前范围 {questionPool.length} 题
                   </span>
-                  <h2>{quizzes[quizIndex].title}</h2>
+                  <h2>{currentQuiz.title}</h2>
                 </div>
-                <span className="level-badge">
-                  打 {quizzes[quizIndex].level}
-                </span>
+                <div className="quiz-badges">
+                  <span className="topic-badge">{currentQuiz.topic}</span>
+                  <span className="level-badge">
+                    {trainingDifficultyMeta[currentQuiz.difficulty].name}
+                  </span>
+                </div>
               </div>
-              <p className="quiz-prompt">{quizzes[quizIndex].prompt}</p>
-              <div className="quiz-cards">
-                {quizzes[quizIndex].cards.map((card) => (
-                  <CardFace
-                    key={card.id}
-                    card={card}
-                    level={quizzes[quizIndex].level}
-                    disabled
-                  />
-                ))}
-              </div>
+              <p className="quiz-context">{currentQuiz.context}</p>
+              <p className="quiz-prompt">{currentQuiz.prompt}</p>
+              {currentQuiz.cards.length > 0 ? (
+                <div className="quiz-cards">
+                  {currentQuiz.cards.map((card) => (
+                    <CardFace
+                      key={card.id}
+                      card={card}
+                      level={currentQuiz.level}
+                      disabled
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="scenario-board">
+                  <span>
+                    <BrainCircuit size={23} />
+                  </span>
+                  <div>
+                    <strong>局面推演题</strong>
+                    <p>先比较牌权、双方张数与下一手出口，再做选择</p>
+                  </div>
+                  <Clock3 size={18} />
+                  <small>建议 {currentQuiz.estimatedSeconds} 秒</small>
+                </div>
+              )}
+              <button
+                type="button"
+                className={`hint-button${hintVisible ? " active" : ""}`}
+                aria-expanded={hintVisible}
+                onClick={() => setHintVisible((visible) => !visible)}
+              >
+                <Lightbulb size={16} />
+                {hintVisible ? currentQuiz.hint : "需要一点提示"}
+              </button>
               <div className="quiz-options">
-                {quizzes[quizIndex].options.map((option, index) => {
-                  const correct = index === quizzes[quizIndex].answer;
+                {currentQuiz.options.map((option, index) => {
+                  const correct = index === currentQuiz.answer;
                   const chosen = quizAnswer === index;
                   return (
                     <button
@@ -704,7 +896,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
               {quizAnswer !== null && (
                 <div className="quiz-feedback">
                   <span>
-                    {quizAnswer === quizzes[quizIndex].answer ? (
+                    {quizAnswer === currentQuiz.answer ? (
                       <Check size={18} />
                     ) : (
                       <CircleHelp size={18} />
@@ -712,12 +904,12 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                   </span>
                   <div>
                     <strong>
-                      {quizAnswer === quizzes[quizIndex].answer
+                      {quizAnswer === currentQuiz.answer
                         ? "判断正确"
                         : "这一步值得重新理解"}
                     </strong>
-                    <p>{quizzes[quizIndex].explanation}</p>
-                    <small>{quizzes[quizIndex].principle}</small>
+                    <p>{currentQuiz.explanation}</p>
+                    <small>可迁移原则 · {currentQuiz.principle}</small>
                   </div>
                   <button type="button" onClick={nextQuiz}>
                     下一题
@@ -728,30 +920,67 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
             </div>
 
             <div className="module-stack">
+              <article className="topic-tip">
+                <span>
+                  <Lightbulb size={18} />
+                </span>
+                <div>
+                  <small>{currentQuiz.topic} · 三步法</small>
+                  <h3>{currentTip.cue}</h3>
+                  <ol>
+                    {currentTip.steps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              </article>
               <TrainingModule
                 icon={<Target size={20} />}
-                title="最少手数"
-                stat="拆牌规划"
-                text="比较多种组合方式，学习如何减少剩余手数而不破坏炸弹"
-                active
+                title="组牌规划"
+                stat={`${trainingBankStats.byTopic["组牌规划"]} 题`}
+                text={topicDescriptions["组牌规划"]}
+                active={trainingTopic === "组牌规划"}
+                onClick={() => selectTopic("组牌规划")}
               />
               <TrainingModule
                 icon={<Users size={20} />}
-                title="搭档推理"
-                stat="合作判断"
-                text="根据伙伴出牌、剩余张数和牌权推断最合理的让牌时机"
+                title="搭档协同"
+                stat={`${trainingBankStats.byTopic["搭档协同"]} 题`}
+                text={topicDescriptions["搭档协同"]}
+                active={trainingTopic === "搭档协同"}
+                onClick={() => selectTopic("搭档协同")}
               />
               <TrainingModule
                 icon={<BrainCircuit size={20} />}
-                title="记牌扫描"
-                stat="信息更新"
-                text="训练级牌、王、炸弹资源和关键牌张的动态记忆"
+                title="记牌推理"
+                stat={`${trainingBankStats.byTopic["记牌推理"]} 题`}
+                text={topicDescriptions["记牌推理"]}
+                active={trainingTopic === "记牌推理"}
+                onClick={() => selectTopic("记牌推理")}
               />
               <TrainingModule
                 icon={<Zap size={20} />}
-                title="残局拦截"
-                stat="终局控制"
-                text="专练对手一手走完、接风和炸弹交换后的选择"
+                title="炸弹管理"
+                stat={`${trainingBankStats.byTopic["炸弹管理"]} 题`}
+                text={topicDescriptions["炸弹管理"]}
+                active={trainingTopic === "炸弹管理"}
+                onClick={() => selectTopic("炸弹管理")}
+              />
+              <TrainingModule
+                icon={<ShieldCheck size={20} />}
+                title="残局处理"
+                stat={`${trainingBankStats.byTopic["残局处理"]} 题`}
+                text={topicDescriptions["残局处理"]}
+                active={trainingTopic === "残局处理"}
+                onClick={() => selectTopic("残局处理")}
+              />
+              <TrainingModule
+                icon={<Gauge size={20} />}
+                title="风险判断"
+                stat={`${trainingBankStats.byTopic["风险判断"]} 题`}
+                text={topicDescriptions["风险判断"]}
+                active={trainingTopic === "风险判断"}
+                onClick={() => selectTopic("风险判断")}
               />
             </div>
           </div>
@@ -786,9 +1015,12 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
             />
             <InsightMetric
               icon={<Activity size={21} />}
-              label="训练连续"
-              value={progress.streak}
-              detail="完成专项训练次数"
+              label="专项正确率"
+              value={`${percent(
+                progress.questionsCorrect,
+                progress.questionsAnswered
+              )}%`}
+              detail={`${progress.reviewDue} 题等待回炉`}
             />
           </div>
 
@@ -801,13 +1033,28 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                 </div>
                 <BarChart3 size={20} />
               </div>
-              <SkillBar label="牌型效率" value={76} />
-              <SkillBar label="牌权控制" value={62} />
-              <SkillBar label="搭档协同" value={68} />
-              <SkillBar label="残局处理" value={54} />
-              <SkillBar label="信息记忆" value={59} />
+              <SkillBar
+                label="牌型识别"
+                value={skillPercent(progress, "牌型识别", 76)}
+              />
+              <SkillBar
+                label="牌权控制"
+                value={skillPercent(progress, "牌权控制", 62)}
+              />
+              <SkillBar
+                label="搭档协同"
+                value={skillPercent(progress, "搭档协同", 68)}
+              />
+              <SkillBar
+                label="残局处理"
+                value={skillPercent(progress, "残局处理", 54)}
+              />
+              <SkillBar
+                label="记牌推理"
+                value={skillPercent(progress, "记牌推理", 59)}
+              />
               <p className="analytics-note">
-                当前优先训练残局处理，尤其是对手剩 1 至 3 张时的拦截阈值
+                系统会优先安排错误较多的主题，答对后再逐步提升难度
               </p>
             </article>
 
@@ -820,8 +1067,12 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                 <BrainCircuit size={20} />
               </div>
               <div className="task-list">
-                <TaskItem number="01" title="残局拦截 6 题" meta="约 4 分钟" />
-                <TaskItem number="02" title="搭档牌权 4 题" meta="约 3 分钟" />
+                <TaskItem
+                  number="01"
+                  title={`错题回炉 ${Math.min(progress.reviewDue, 6)} 题`}
+                  meta={progress.reviewDue ? "优先修正误区" : "当前没有积压"}
+                />
+                <TaskItem number="02" title="分层专项 12 题" meta="约 8 分钟" />
                 <TaskItem number="03" title="完整对局 1 盘" meta="开启逐手解释" />
               </div>
               <button
@@ -1019,15 +1270,21 @@ function TrainingModule({
   stat,
   text,
   active = false,
+  onClick,
 }: {
   icon: React.ReactNode;
   title: string;
   stat: string;
   text: string;
   active?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <article className={`training-module${active ? " active" : ""}`}>
+    <button
+      type="button"
+      className={`training-module${active ? " active" : ""}`}
+      onClick={onClick}
+    >
       <span>{icon}</span>
       <div>
         <small>{stat}</small>
@@ -1035,6 +1292,29 @@ function TrainingModule({
         <p>{text}</p>
       </div>
       <ChevronRight size={19} />
+    </button>
+  );
+}
+
+function TrainingStat({
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  detail: string;
+}) {
+  return (
+    <article>
+      <span>{icon}</span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <p>{detail}</p>
+      </div>
     </article>
   );
 }
