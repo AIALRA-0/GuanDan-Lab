@@ -9,6 +9,13 @@ import {
   Seat,
 } from "./types";
 
+const seatDisplayNames: Record<Seat, string> = {
+  0: "你",
+  1: "北家",
+  2: "搭档",
+  3: "南家",
+};
+
 function nextActiveSeat(state: GameState, from: Seat): Seat {
   let seat = ((from + 1) % 4) as Seat;
   while (state.finished.includes(seat)) seat = ((seat + 1) % 4) as Seat;
@@ -196,21 +203,83 @@ export function explainMove(
     state.targetSeat !== undefined && seatTeam(state.targetSeat) === seatTeam(seat);
   const label = pattern ? patternTypeLabel(pattern.type) : "过牌";
   const remaining = state.hands[seat].length - (pattern?.cards.length ?? 0);
+  const partner = partnerOf(seat);
+  const opponents = ([0, 1, 2, 3] as Seat[]).filter(
+    (candidate) => seatTeam(candidate) !== seatTeam(seat)
+  );
+  const nextSeat = nextActiveSeat(state, seat);
+  const positiveFactors = (chosen?.factors ?? []).filter(
+    (factor) => factor.value > 0
+  );
+  const negativeFactors = (chosen?.factors ?? []).filter(
+    (factor) => factor.value < 0
+  );
+  const chosenLabel = pattern?.label ?? "过牌";
+  const bestLabel = best?.pattern?.label ?? "过牌";
+  const actorName = seatDisplayNames[seat];
+  const nextOpponentDanger =
+    seatTeam(nextSeat) !== seatTeam(seat) && state.hands[nextSeat].length <= 5;
+  const evidence = [
+    state.target && state.targetSeat !== undefined
+      ? `桌面是${state.target.label}，由${seatDisplayNames[state.targetSeat]}持有牌权`
+      : `当前没有桌面牌型限制，${actorName}拥有新一轮先手`,
+    pattern
+      ? `这手${chosenLabel}，一次处理 ${pattern.cards.length} 张，出完后${actorName}剩 ${remaining} 张`
+      : `${actorName}选择过牌后仍保留 ${remaining} 张，等待下一次接牌窗口`,
+    `搭档剩 ${state.hands[partner].length} 张，两名对手分别剩 ${state.hands[opponents[0]].length} 张和 ${state.hands[opponents[1]].length} 张`,
+    positiveFactors.length > 0
+      ? `主要收益来自${positiveFactors
+          .map((factor) => `${factor.label} ${factor.value > 0 ? "+" : ""}${factor.value}`)
+          .join("、")}`
+      : "这手没有明显的即时收益，价值主要来自保留后续选择",
+  ];
+  const risks = [
+    ...(gap >= 0.8
+      ? [`当前首选是${bestLabel}，这条路线少 ${Math.round(gap * 10) / 10} 分`]
+      : ["当前选择接近评分首选，没有明显的路线损失"]),
+    ...negativeFactors.map(
+      (factor) => `${factor.label}会产生 ${Math.abs(factor.value)} 分代价`
+    ),
+    ...(nextOpponentDanger
+      ? [`下一位对手只剩 ${state.hands[nextSeat].length} 张，必须防止其一手或两手走完`]
+      : []),
+    ...(pattern && isBomb(pattern) && remaining > 0
+      ? ["炸弹一旦使用就失去后续强制夺权能力，需要确认炸后出口"]
+      : []),
+  ];
+  const nextSteps = [
+    state.target
+      ? `先确认${chosenLabel}能否合法压过${state.target.label}`
+      : `先比较${chosenLabel}与其他先手路线能处理的张数`,
+    remaining <= 5
+      ? `再安排剩余 ${remaining} 张的具体出完顺序`
+      : `再检查出牌后是否保留对子、连续结构或高级控制牌`,
+    targetIsPartner
+      ? "最后确认覆盖搭档是否真的能带来走完或紧急阻断"
+      : `最后观察搭档 ${state.hands[partner].length} 张是否有接风机会`,
+  ];
 
   return {
     headline: `${label} · ${quality}`,
-    reason:
-      chosen?.summary ??
-      (pattern ? "这手牌改变了当前牌权结构" : "保留牌力等待下一次机会"),
+    reason: chosen
+      ? `${chosen.summary}，综合评分 ${Math.round(chosen.score * 10) / 10} 分`
+      : pattern
+        ? "这手牌改变了当前牌权结构"
+        : "保留牌力等待下一次机会",
     consequence:
       remaining === 0
         ? "这一步完成出完，直接锁定一个名次"
-        : `出牌后还剩 ${remaining} 张，当前目标是降低剩余组合数并保留终局控制`,
+        : pattern
+          ? `出牌后还剩 ${remaining} 张，接下来要验证能否继续组织下一手，而不是只看这一手压得多大`
+          : `过牌后仍剩 ${remaining} 张，收益是保留结构，代价是暂时放弃本轮控制`,
     partnerRead: targetIsPartner
       ? pattern
         ? "当前最大牌来自搭档，主动盖牌需要有明确的走完或拦截理由"
         : "让牌能够保留搭档牌权，是合作型牌局中的重要选择"
-      : "当前需要同时考虑下家的剩余张数和搭档下一轮接牌能力",
+      : `搭档还剩 ${state.hands[partner].length} 张，需要判断你的路线是在为搭档创造接风，还是独自消耗控制牌`,
+    evidence,
+    risks,
+    nextSteps,
     confidence: Math.max(
       38,
       Math.min(96, Math.round(64 + ((best?.score ?? 0) - (second?.score ?? 0)) * 4))
@@ -247,4 +316,3 @@ export function publicSituation(state: GameState, seat: Seat): string {
   ).length;
   return `搭档剩 ${state.hands[partner].length} 张，对手最少剩 ${danger} 张，你有 ${highCards} 张高级控制牌`;
 }
-

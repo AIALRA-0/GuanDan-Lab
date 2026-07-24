@@ -12,19 +12,26 @@ import {
   ChevronRight,
   CircleHelp,
   Clock3,
+  Eye,
+  EyeOff,
   Flame,
   Gauge,
   Hand,
+  History,
   Layers3,
   Lightbulb,
+  MessageCircleQuestion,
   Medal,
   Pause,
   RefreshCw,
+  Route,
   RotateCcw,
+  Search,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Target,
+  TriangleAlert,
   Trophy,
   Users,
   X,
@@ -42,13 +49,15 @@ import {
 } from "@/lib/guandan/game";
 import { chooseAiMove, explainMove, publicSituation, scoreLegalMoves } from "@/lib/guandan/strategy";
 import {
+  Card,
   DecisionExplanation,
   Difficulty,
   GameState,
   ProgressSummary,
+  ScoredMove,
   Seat,
 } from "@/lib/guandan/types";
-import { seatTeam } from "@/lib/guandan/cards";
+import { cardLabel, isWild, seatTeam } from "@/lib/guandan/cards";
 import {
   questionForSession,
   trainingBank,
@@ -61,6 +70,13 @@ import {
 } from "@/lib/guandan/training";
 
 type View = "table" | "training" | "insights" | "rules";
+type CoachQuestion = "evidence" | "risk" | "partner" | "compare";
+type CoachPanelView = "coach" | "history";
+type HistoryFilter = "all" | "team" | "opponents";
+type HistoryRow = {
+  record: GameState["records"][number];
+  remainingAfter: number;
+};
 
 const seatNames: Record<Seat, string> = {
   0: "你",
@@ -137,6 +153,13 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coach, setCoach] = useState<DecisionExplanation | null>(null);
+  const [coachQuestion, setCoachQuestion] =
+    useState<CoachQuestion>("evidence");
+  const [coachPanelView, setCoachPanelView] =
+    useState<CoachPanelView>("coach");
+  const [trainingVision, setTrainingVision] = useState(true);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  const [reviewRecordId, setReviewRecordId] = useState<number | null>(null);
   const [notice, setNotice] = useState("请选择牌后出牌，或先查看推荐");
   const [progress, setProgress] = useState<ProgressSummary>(emptyProgress);
   const [quizIndex, setQuizIndex] = useState(0);
@@ -162,9 +185,79 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
     [selectedIds, state]
   );
   const latestRecord = state.records.at(-1);
+  const reviewedRecord =
+    reviewRecordId === null
+      ? undefined
+      : state.records.find((record) => record.id === reviewRecordId);
+  const selectedCoach = useMemo(
+    () => (selected ? explainMove(state, 0, selected) : null),
+    [selected, state]
+  );
   const activeCoach = coachEnabled
-    ? coach ?? latestRecord?.explanation ?? null
+    ? reviewedRecord?.explanation ??
+      selectedCoach ??
+      coach ??
+      latestRecord?.explanation ??
+      null
     : null;
+  const activeCoachSource = reviewedRecord
+    ? `复盘第 ${reviewedRecord.id} 手 · ${seatNames[reviewedRecord.seat]}`
+    : selectedCoach
+      ? "正在分析你的试选"
+      : coach
+        ? "推荐路线"
+        : latestRecord
+          ? `刚刚 · ${seatNames[latestRecord.seat]}`
+          : "等待你的选择";
+  const coachCandidates = useMemo(
+    () => {
+      if (state.currentSeat !== 0 || state.winnerTeam !== undefined) return [];
+      const seen = new Set<string>();
+      return scoreLegalMoves(state, 0, "master")
+        .filter((candidate) => {
+          const key = candidate.pattern
+            ? `${candidate.pattern.type}:${[
+                ...candidate.pattern.resolvedRanks,
+              ]
+                .sort()
+                .join(",")}:${candidate.pattern.size}`
+            : "pass";
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 3);
+    },
+    [state]
+  );
+  const historyRows = useMemo(() => {
+    const remaining = state.hands.map(
+      (hand, seat) =>
+        hand.length +
+        state.records
+          .filter((record) => record.seat === seat && record.pattern)
+          .reduce(
+            (sum, record) => sum + (record.pattern?.cards.length ?? 0),
+            0
+          )
+    );
+    return state.records.map((record) => {
+      if (record.pattern) {
+        remaining[record.seat] -= record.pattern.cards.length;
+      }
+      return {
+        record,
+        remainingAfter: remaining[record.seat],
+      };
+    });
+  }, [state.hands, state.records]);
+  const visibleHistoryRows = historyRows
+    .filter(({ record }) => {
+      if (historyFilter === "all") return true;
+      const sameTeam = seatTeam(record.seat) === 0;
+      return historyFilter === "team" ? sameTeam : !sameTeam;
+    });
+  visibleHistoryRows.reverse();
   const humanRecords = state.records.filter((record) => record.seat === 0);
   const strongHumanDecisions = humanRecords.filter(
     (record) =>
@@ -283,11 +376,18 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
     setState(createGame());
     setSelectedIds([]);
     setCoach(null);
+    setReviewRecordId(null);
+    setCoachQuestion("evidence");
+    setCoachPanelView("coach");
     setNotice("新的一局已经发牌，本局从打 2 开始");
   };
 
   const toggleCard = (id: string) => {
     if (state.currentSeat !== 0 || state.winnerTeam !== undefined) return;
+    setCoach(null);
+    setReviewRecordId(null);
+    setCoachQuestion("evidence");
+    setCoachPanelView("coach");
     setSelectedIds((current) =>
       current.includes(id)
         ? current.filter((candidate) => candidate !== id)
@@ -301,6 +401,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
       setState(next);
       setSelectedIds([]);
       setCoach(null);
+      setReviewRecordId(null);
       setNotice(selected ? `已出 ${selected.label}` : "已出牌");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "无法完成出牌");
@@ -312,6 +413,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
       setState(pass(state, 0));
       setSelectedIds([]);
       setCoach(null);
+      setReviewRecordId(null);
       setNotice("已过牌，继续观察其余玩家的选择");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "当前不能过牌");
@@ -326,7 +428,32 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
     }
     setCoach(explainMove(state, 0, best.pattern));
     setSelectedIds(best.pattern?.cards.map((card) => card.id) ?? []);
+    setReviewRecordId(null);
+    setCoachQuestion("evidence");
+    setCoachPanelView("coach");
     setNotice(`建议 ${best.pattern?.label ?? "过牌"}，已在右侧解释原因`);
+  };
+
+  const tryCoachCandidate = (candidate: ScoredMove) => {
+    if (state.currentSeat !== 0 || state.winnerTeam !== undefined) return;
+    setReviewRecordId(null);
+    setCoachPanelView("coach");
+    setCoachQuestion("evidence");
+    setSelectedIds(candidate.pattern?.cards.map((card) => card.id) ?? []);
+    setCoach(explainMove(state, 0, candidate.pattern));
+    setNotice(
+      candidate.pattern
+        ? `已试选 ${candidate.pattern.label}，确认后再出牌`
+        : "正在比较过牌路线，确认后可点击过牌"
+    );
+  };
+
+  const reviewTurn = (recordId: number) => {
+    setReviewRecordId(recordId);
+    setCoachPanelView("coach");
+    setCoachQuestion("evidence");
+    setSelectedIds([]);
+    setCoach(null);
   };
 
   const submitQuiz = (answer: number) => {
@@ -473,11 +600,32 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                     </button>
                   ))}
                 </div>
-                <button className="icon-action" type="button" onClick={startNewGame}>
-                  <RefreshCw size={16} />
-                  新局
-                </button>
+                <div className="table-tools">
+                  <button
+                    className={`icon-action vision-action${
+                      trainingVision ? " active" : ""
+                    }`}
+                    type="button"
+                    onClick={() => setTrainingVision((visible) => !visible)}
+                    aria-pressed={trainingVision}
+                  >
+                    {trainingVision ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {trainingVision ? "隐藏透视" : "训练透视"}
+                  </button>
+                  <button
+                    className="icon-action"
+                    type="button"
+                    onClick={startNewGame}
+                  >
+                    <RefreshCw size={16} />
+                    新局
+                  </button>
+                </div>
               </div>
+
+              {trainingVision && (
+                <TrainingVision state={state} />
+              )}
 
               <div className="game-table">
                 <PlayerSeat
@@ -654,70 +802,177 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                 </button>
               </div>
 
-              <div className="situation-card">
-                <div className="section-label">
-                  <Activity size={15} />
-                  局面摘要
-                </div>
-                <p>{publicSituation(state, 0)}</p>
+              <div className="coach-view-tabs" aria-label="分析面板">
+                <button
+                  type="button"
+                  className={coachPanelView === "coach" ? "active" : ""}
+                  onClick={() => setCoachPanelView("coach")}
+                >
+                  <MessageCircleQuestion size={15} />
+                  交互教练
+                </button>
+                <button
+                  type="button"
+                  className={coachPanelView === "history" ? "active" : ""}
+                  onClick={() => setCoachPanelView("history")}
+                >
+                  <History size={15} />
+                  对局历史
+                  <span>{state.records.length}</span>
+                </button>
               </div>
 
-              {activeCoach ? (
-                <div className="coach-explanation">
-                  <div className="quality-row">
-                    <span className={`quality quality-${activeCoach.quality}`}>
-                      {activeCoach.quality}
-                    </span>
-                    <span>判断信心 {activeCoach.confidence}%</span>
+              {coachPanelView === "coach" ? (
+                <>
+                  <div className="situation-card">
+                    <div className="section-label">
+                      <Activity size={15} />
+                      {activeCoachSource}
+                    </div>
+                    <p>{publicSituation(state, 0)}</p>
                   </div>
-                  <h2>{activeCoach.headline}</h2>
-                  <ExplainBlock label="为什么" text={activeCoach.reason} />
-                  <ExplainBlock label="接下来" text={activeCoach.consequence} />
-                  <ExplainBlock label="搭档视角" text={activeCoach.partnerRead} />
 
-                  <div className="factor-list">
-                    {activeCoach.factors.map((factor) => (
-                      <div className="factor" key={factor.label}>
-                        <span>{factor.label}</span>
-                        <div className="factor-track">
-                          <i
-                            className={factor.tone}
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                Math.max(12, 50 + factor.value * 5)
-                              )}%`,
-                            }}
-                          />
+                  {activeCoach ? (
+                    <div className="coach-explanation">
+                      {reviewedRecord && (
+                        <div className="review-banner">
+                          <span>正在复盘第 {reviewedRecord.id} 手</span>
+                          <button
+                            type="button"
+                            onClick={() => setReviewRecordId(null)}
+                          >
+                            回到实时
+                          </button>
                         </div>
-                        <strong>
-                          {factor.value > 0 ? "+" : ""}
-                          {factor.value}
-                        </strong>
+                      )}
+                      <div className="quality-row">
+                        <span
+                          className={`quality quality-${activeCoach.quality}`}
+                        >
+                          {activeCoach.quality}
+                        </span>
+                        <span>判断信心 {activeCoach.confidence}%</span>
                       </div>
-                    ))}
-                  </div>
+                      <h2>{activeCoach.headline}</h2>
+                      <p className="coach-summary">{activeCoach.reason}</p>
 
-                  {activeCoach.alternative && (
-                    <div className="alternative-card">
-                      <span>反事实比较</span>
-                      <strong>{activeCoach.alternative.label}</strong>
-                      <p>{activeCoach.alternative.reason}</p>
-                      <small>与首选相差 {activeCoach.alternative.delta} 分</small>
+                      <div
+                        className="coach-question-tabs"
+                        aria-label="向教练追问"
+                      >
+                        <CoachQuestionButton
+                          active={coachQuestion === "evidence"}
+                          icon={<Search size={14} />}
+                          label="凭什么"
+                          onClick={() => setCoachQuestion("evidence")}
+                        />
+                        <CoachQuestionButton
+                          active={coachQuestion === "risk"}
+                          icon={<TriangleAlert size={14} />}
+                          label="风险呢"
+                          onClick={() => setCoachQuestion("risk")}
+                        />
+                        <CoachQuestionButton
+                          active={coachQuestion === "partner"}
+                          icon={<Users size={14} />}
+                          label="搭档呢"
+                          onClick={() => setCoachQuestion("partner")}
+                        />
+                        <CoachQuestionButton
+                          active={coachQuestion === "compare"}
+                          icon={<Route size={14} />}
+                          label="还有呢"
+                          onClick={() => setCoachQuestion("compare")}
+                        />
+                      </div>
+
+                      {coachQuestion === "evidence" && (
+                        <CoachAnswer
+                          title="判断链，不只给结论"
+                          intro={activeCoach.consequence}
+                          items={activeCoach.evidence}
+                        />
+                      )}
+                      {coachQuestion === "risk" && (
+                        <CoachAnswer
+                          title="最坏情况与代价"
+                          intro="先看失败会失去什么，再决定是否值得冒险"
+                          items={activeCoach.risks}
+                          tone="warning"
+                        />
+                      )}
+                      {coachQuestion === "partner" && (
+                        <CoachAnswer
+                          title="把搭档放进同一条路线"
+                          intro={activeCoach.partnerRead}
+                          items={activeCoach.nextSteps}
+                        />
+                      )}
+                      {coachQuestion === "compare" && (
+                        <CandidateComparison
+                          candidates={coachCandidates}
+                          recordedAlternative={activeCoach.alternative}
+                          disabled={
+                            state.currentSeat !== 0 ||
+                            state.winnerTeam !== undefined ||
+                            Boolean(reviewedRecord)
+                          }
+                          onTry={tryCoachCandidate}
+                        />
+                      )}
+
+                      <div className="factor-list">
+                        {activeCoach.factors.map((factor) => (
+                          <div className="factor" key={factor.label}>
+                            <span>{factor.label}</span>
+                            <div className="factor-track">
+                              <i
+                                className={factor.tone}
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    Math.max(12, 50 + factor.value * 5)
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                            <strong>
+                              {factor.value > 0 ? "+" : ""}
+                              {factor.value}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : selectedIds.length > 0 ? (
+                    <div className="coach-empty compact">
+                      <TriangleAlert size={28} />
+                      <strong>当前选牌还不是合法牌型</strong>
+                      <p>继续补牌或取消部分牌，形成合法牌型后会立即开始解释</p>
+                    </div>
+                  ) : (
+                    <div className="coach-empty">
+                      <Sparkles size={28} />
+                      <strong>选一张牌就开始分析</strong>
+                      <p>不必先出牌，教练会实时拆解依据、风险、搭档影响和替代路线</p>
                     </div>
                   )}
-                </div>
+                </>
               ) : (
-                <div className="coach-empty">
-                  <Sparkles size={28} />
-                  <strong>先做一次选择</strong>
-                  <p>教练会解释这手牌的收益、代价、搭档影响和替代方案</p>
-                </div>
+                <TurnHistory
+                  rows={visibleHistoryRows}
+                  level={state.level}
+                  filter={historyFilter}
+                  onFilter={setHistoryFilter}
+                  onReview={reviewTurn}
+                />
               )}
 
               <div className="coach-footer">
                 <ShieldCheck size={15} />
-                解释只基于规则、公开信息和可验证评分
+                {trainingVision
+                  ? "训练透视已开启，解释会明确区分公开信息与完整牌面"
+                  : "实战模式只使用公开信息，训练透视可单独开启"}
               </div>
             </aside>
           </section>
@@ -1272,11 +1527,255 @@ function PlayerSeat({
   );
 }
 
-function ExplainBlock({ label, text }: { label: string; text: string }) {
+const compactSuitSymbol = {
+  spades: "♠",
+  hearts: "♥",
+  clubs: "♣",
+  diamonds: "♦",
+  joker: "✦",
+} as const;
+
+function TrainingVision({ state }: { state: GameState }) {
   return (
-    <div className="explain-block">
-      <span>{label}</span>
-      <p>{text}</p>
+    <section className="vision-drawer" aria-label="训练透视">
+      <div className="vision-intro">
+        <span>
+          <Eye size={16} />
+        </span>
+        <div>
+          <strong>三家完整牌面</strong>
+          <p>训练模式用于验证推理，关闭后恢复只看公开信息的实战视角</p>
+        </div>
+      </div>
+      <div className="vision-hands">
+        {([1, 2, 3] as Seat[]).map((seat) => (
+          <article className="vision-hand" key={seat}>
+            <header>
+              <strong>{seatNames[seat]}</strong>
+              <span>
+                {seatTeam(seat) === 0 ? "我方" : "对方"} ·{" "}
+                {state.hands[seat].length} 张
+              </span>
+            </header>
+            <div className="vision-cards" aria-label={`${seatNames[seat]}手牌`}>
+              {state.hands[seat].map((card) => (
+                <CompactCard key={card.id} card={card} level={state.level} />
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CompactCard({
+  card,
+  level,
+}: {
+  card: Card;
+  level: GameState["level"];
+}) {
+  const red = card.suit === "hearts" || card.suit === "diamonds";
+  return (
+    <span
+      className={`vision-card${red ? " red" : ""}${
+        isWild(card, level) ? " wild" : ""
+      }`}
+      title={`${cardLabel(card)} ${compactSuitSymbol[card.suit]}${
+        isWild(card, level) ? " 逢人配" : ""
+      }`}
+    >
+      <strong>{cardLabel(card)}</strong>
+      <small>{compactSuitSymbol[card.suit]}</small>
+    </span>
+  );
+}
+
+function CoachQuestionButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={active ? "active" : ""}
+      onClick={onClick}
+      aria-pressed={active}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function CoachAnswer({
+  title,
+  intro,
+  items,
+  tone = "default",
+}: {
+  title: string;
+  intro: string;
+  items: string[];
+  tone?: "default" | "warning";
+}) {
+  return (
+    <div className={`coach-answer ${tone}`}>
+      <strong>{title}</strong>
+      <p>{intro}</p>
+      <ol>
+        {items.map((item, index) => (
+          <li key={`${index}-${item}`}>
+            <span>{index + 1}</span>
+            <p>{item}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function CandidateComparison({
+  candidates,
+  recordedAlternative,
+  disabled,
+  onTry,
+}: {
+  candidates: ScoredMove[];
+  recordedAlternative?: DecisionExplanation["alternative"];
+  disabled: boolean;
+  onTry: (candidate: ScoredMove) => void;
+}) {
+  if (disabled || candidates.length === 0) {
+    return (
+      <div className="coach-answer">
+        <strong>当时的替代路线</strong>
+        {recordedAlternative ? (
+          <>
+            <p>
+              {recordedAlternative.label}，{recordedAlternative.reason}
+            </p>
+            <small>与首选相差 {recordedAlternative.delta} 分</small>
+          </>
+        ) : (
+          <p>当前处于历史复盘或等待阶段，回到实时轮次后可以直接试选候选路线</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="candidate-list">
+      <div>
+        <strong>三条可比较路线</strong>
+        <span>点击后只试选，不会自动出牌</span>
+      </div>
+      {candidates.map((candidate, index) => (
+        <button
+          type="button"
+          key={candidate.pattern?.id ?? `pass-${index}`}
+          onClick={() => onTry(candidate)}
+          aria-label={`试选路线 ${index + 1} ${
+            candidate.pattern?.label ?? "过牌"
+          }`}
+        >
+          <span>{index + 1}</span>
+          <div>
+            <strong>{candidate.pattern?.label ?? "过牌"}</strong>
+            <p>{candidate.summary}</p>
+          </div>
+          <em>{Math.round(candidate.score * 10) / 10}</em>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TurnHistory({
+  rows,
+  level,
+  filter,
+  onFilter,
+  onReview,
+}: {
+  rows: HistoryRow[];
+  level: GameState["level"];
+  filter: HistoryFilter;
+  onFilter: (filter: HistoryFilter) => void;
+  onReview: (recordId: number) => void;
+}) {
+  return (
+    <div className="turn-history">
+      <div className="history-filter" aria-label="历史筛选">
+        {(
+          [
+            ["all", "全部"],
+            ["team", "我方"],
+            ["opponents", "对方"],
+          ] as Array<[HistoryFilter, string]>
+        ).map(([value, label]) => (
+          <button
+            type="button"
+            key={value}
+            className={filter === value ? "active" : ""}
+            onClick={() => onFilter(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {rows.length > 0 ? (
+        <div className="history-list">
+          {rows.map(({ record, remainingAfter }) => (
+            <button
+              type="button"
+              className="history-item"
+              key={record.id}
+              onClick={() => onReview(record.id)}
+            >
+              <span className="history-index">#{record.id}</span>
+              <div>
+                <header>
+                  <strong>{seatNames[record.seat]}</strong>
+                  <span>
+                    {record.action === "pass"
+                      ? "过牌"
+                      : record.pattern?.label ?? "出牌"}
+                  </span>
+                </header>
+                {record.pattern ? (
+                  <div className="history-cards">
+                    {record.pattern.cards.map((card) => (
+                      <CompactCard
+                        key={card.id}
+                        card={card}
+                        level={level}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p>保留手牌，放弃本次压制</p>
+                )}
+              </div>
+              <em>{remainingAfter} 张</em>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="history-empty">
+          <History size={28} />
+          <strong>还没有出牌记录</strong>
+          <p>第一手完成后，这里会记录每一家出牌、过牌和剩余张数</p>
+        </div>
+      )}
     </div>
   );
 }

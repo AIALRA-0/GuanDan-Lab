@@ -29,7 +29,12 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(javascript, /每一手都讲清楚为什么/);
   assert.match(javascript, /专项训练/);
   assert.match(javascript, /规则实验室/);
+  assert.match(javascript, /交互教练/);
+  assert.match(javascript, /训练透视/);
+  assert.match(javascript, /对局历史/);
   assert.match(css, /\.game-table/);
+  assert.match(css, /\.vision-drawer/);
+  assert.match(css, /\.history-list/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(server, /vinext/);
   assert.doesNotMatch(

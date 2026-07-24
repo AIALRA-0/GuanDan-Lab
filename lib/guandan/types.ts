@@ -72,6 +72,9 @@ export interface DecisionExplanation {
   reason: string;
   consequence: string;
   partnerRead: string;
+  evidence: string[];
+  risks: string[];
+  nextSteps: string[];
   confidence: number;
   quality: "精确" | "稳健" | "可行" | "冒险" | "失误";
   factors: DecisionFactor[];

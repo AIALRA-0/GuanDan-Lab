@@ -7,7 +7,11 @@ import {
   isBomb,
   legalPatterns,
 } from "../lib/guandan/patterns";
-import { chooseAiMove } from "../lib/guandan/strategy";
+import {
+  chooseAiMove,
+  explainMove,
+  scoreLegalMoves,
+} from "../lib/guandan/strategy";
 import {
   questionForSession,
   trainingBank,
@@ -224,6 +228,18 @@ describe("轮次、接风与名次", () => {
 });
 
 describe("AI 合法性与性能", () => {
+  it("实时教练给出依据、风险、下一步和可试选路线", () => {
+    const state = createGame(20260724, "7");
+    const candidates = scoreLegalMoves(state, 0, "master");
+    expect(candidates.length).toBeGreaterThan(2);
+    const explanation = explainMove(state, 0, candidates[0].pattern);
+    expect(explanation.evidence.length).toBeGreaterThanOrEqual(4);
+    expect(explanation.risks.length).toBeGreaterThanOrEqual(1);
+    expect(explanation.nextSteps).toHaveLength(3);
+    expect(explanation.reason).toContain("综合评分");
+    expect(explanation.partnerRead).toContain("搭档");
+  });
+
   it("AI 在完整模拟中始终选择合法动作", () => {
     for (const seed of [11, 97, 2026]) {
       let state = createGame(seed, "7");
