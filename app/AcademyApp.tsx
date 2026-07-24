@@ -39,6 +39,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { CardBack, CardFace } from "./components/CardFace";
 import {
   applySelectedCards,
@@ -69,6 +70,7 @@ import {
   TrainingDifficulty,
   TrainingTopic,
 } from "@/lib/guandan/training";
+import { buildHandFanLayout } from "@/lib/guandan/hand-layout";
 
 type View = "table" | "training" | "insights" | "rules";
 type CoachQuestion = "evidence" | "risk" | "partner" | "compare";
@@ -239,6 +241,73 @@ function advanceAiGame(current: GameState, difficulty: Difficulty): GameState {
 type AcademyAppProps = {
   initialSeed: number;
 };
+
+function PlayerHand({
+  cards,
+  level,
+  selectedIds,
+  disabled,
+  onToggle,
+}: {
+  cards: Card[];
+  level: GameState["level"];
+  selectedIds: string[];
+  disabled: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const handRef = useRef<HTMLDivElement | null>(null);
+  const [handWidth, setHandWidth] = useState(720);
+  const layout = useMemo(
+    () => buildHandFanLayout(cards, handWidth),
+    [cards, handWidth]
+  );
+
+  useEffect(() => {
+    const hand = handRef.current;
+    if (!hand) return;
+    const updateWidth = () => setHandWidth(hand.clientWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(hand);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={handRef}
+      className="hand-cards"
+      aria-label="你的手牌"
+      style={{ height: `${layout.height}px` }}
+    >
+      {cards.map((card, index) => {
+        const placement = layout.placements[index];
+        return (
+          <span
+            key={card.id}
+            className={`hand-card-slot${
+              placement.groupStart ? " is-group-start" : ""
+            }${selectedIds.includes(card.id) ? " is-selected" : ""}`}
+            style={{
+              left: `${placement.left}px`,
+              width: `${layout.cardWidth}px`,
+              height: `${layout.cardHeight}px`,
+              zIndex: index + 1,
+              "--visible-step": `${placement.visibleStep}px`,
+            } as CSSProperties}
+          >
+            <CardFace
+              card={card}
+              level={level}
+              selected={selectedIds.includes(card.id)}
+              disabled={disabled}
+              onClick={() => onToggle(card.id)}
+            />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [view, setView] = useState<View>("table");
@@ -890,7 +959,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                   <div className="hand-meta">
                     <div>
                       <strong>你的手牌</strong>
-                      <span>{state.hands[0].length} 张 · 全部可见</span>
+                      <span>{state.hands[0].length} 张 · 单排牌扇</span>
                     </div>
                     <span
                       className={`turn-pill ${
@@ -900,20 +969,15 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                       {state.currentSeat === 0 ? "轮到你" : "等待对手"}
                     </span>
                   </div>
-                  <div className="hand-cards" aria-label="你的手牌">
-                    {state.hands[0].map((card) => (
-                      <CardFace
-                        key={card.id}
-                        card={card}
-                        level={state.level}
-                        selected={selectedIds.includes(card.id)}
-                        disabled={
-                          state.currentSeat !== 0 || state.winnerTeam !== undefined
-                        }
-                        onClick={() => toggleCard(card.id)}
-                      />
-                    ))}
-                  </div>
+                  <PlayerHand
+                    cards={state.hands[0]}
+                    level={state.level}
+                    selectedIds={selectedIds}
+                    disabled={
+                      state.currentSeat !== 0 || state.winnerTeam !== undefined
+                    }
+                    onToggle={toggleCard}
+                  />
                   <div className="action-row">
                     <div className="selection-readout">
                       {selectedIds.length === 0

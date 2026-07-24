@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal } from "../lib/guandan/cards";
 import { createGame, pass, play } from "../lib/guandan/game";
+import { buildHandFanLayout } from "../lib/guandan/hand-layout";
 import {
   canBeat,
   enumeratePatterns,
@@ -66,6 +67,49 @@ describe("双副牌与发牌", () => {
     expect(first.map((hand) => hand.length)).toEqual([27, 27, 27, 27]);
     expect(first).toEqual(second);
     expect(new Set(first.flat().map((candidate) => candidate.id)).size).toBe(108);
+  });
+});
+
+describe("单排手牌布局", () => {
+  const hand = createGame(20260724).hands[0];
+
+  it("手机宽度下 27 张牌保持单排并完整落在容器内", () => {
+    const layout = buildHandFanLayout(hand, 350);
+    expect(layout.placements).toHaveLength(27);
+    expect(layout.height).toBeLessThan(110);
+    expect(layout.placements[0].left).toBeGreaterThanOrEqual(0);
+    expect(
+      layout.placements.at(-1)!.left + layout.cardWidth
+    ).toBeLessThanOrEqual(350.01);
+    expect(
+      layout.placements.every(
+        (placement, index) =>
+          index === 0 ||
+          placement.left > layout.placements[index - 1].left
+      )
+    ).toBe(true);
+  });
+
+  it("不同点数之间的间距大于同点牌间距", () => {
+    const layout = buildHandFanLayout(hand, 700);
+    const sameRankSteps: number[] = [];
+    const groupSteps: number[] = [];
+
+    for (let index = 1; index < hand.length; index += 1) {
+      const step =
+        layout.placements[index].left - layout.placements[index - 1].left;
+      if (hand[index].rank === hand[index - 1].rank) {
+        sameRankSteps.push(step);
+      } else {
+        groupSteps.push(step);
+      }
+    }
+
+    expect(sameRankSteps.length).toBeGreaterThan(0);
+    expect(groupSteps.length).toBeGreaterThan(0);
+    expect(Math.min(...groupSteps)).toBeGreaterThan(
+      Math.max(...sameRankSteps)
+    );
   });
 });
 
