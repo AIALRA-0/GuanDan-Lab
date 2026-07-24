@@ -429,6 +429,9 @@ describe("分层训练题库", () => {
       expect(visibleText).not.toMatch(
         /(?:[A-Za-z0-9%](?=\p{Script=Han})|\p{Script=Han}(?=[A-Za-z0-9]))/u
       );
+      expect(visibleText).not.toMatch(
+        /(?:应识别为|得到|本题补) \p{Script=Han}/u
+      );
     }
   });
 
