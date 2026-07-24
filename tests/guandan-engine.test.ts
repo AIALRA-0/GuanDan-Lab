@@ -413,6 +413,25 @@ describe("分层训练题库", () => {
     }
   });
 
+  it("所有题目中的数字和牌点与中文说明保持清晰间距", () => {
+    for (const question of trainingBank) {
+      const visibleText = [
+        question.title,
+        question.prompt,
+        question.context,
+        question.explanation,
+        question.principle,
+        question.hint,
+        ...question.facts,
+        ...question.options,
+        ...question.reasoning,
+      ].join("\n");
+      expect(visibleText).not.toMatch(
+        /(?:[A-Za-z0-9%](?=\p{Script=Han})|\p{Script=Han}(?=[A-Za-z0-9]))/u
+      );
+    }
+  });
+
   it("所有带牌型标注的题目都能由正式规则引擎验证", () => {
     const patternQuestions = trainingBank.filter(
       (question) => question.expectedPatternType

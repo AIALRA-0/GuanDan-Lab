@@ -261,6 +261,14 @@ function clearCaseName(caseName: string): string {
     .trim();
 }
 
+function formatTrainingText(value: string): string {
+  return value
+    .replace(/([A-Za-z0-9%])(?=\p{Script=Han})/gu, "$1 ")
+    .replace(/(\p{Script=Han})(?=[A-Za-z0-9])/gu, "$1 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function makeQuestion(
   topic: TrainingTopic,
   difficulty: TrainingDifficulty,
@@ -268,20 +276,30 @@ function makeQuestion(
   draft: QuestionDraft
 ): TrainingQuestion {
   const id = `${difficulty}-${topicIds[topic]}-${variant}`;
-  const caseName = clearCaseName(draft.caseName);
+  const caseName = formatTrainingText(clearCaseName(draft.caseName));
+  const rotatedOptions = rotateOptions(
+    draft.correct,
+    draft.distractors,
+    variant
+  );
   return {
     id,
     title: `${topic}：${caseName}`,
-    prompt: draft.task,
+    prompt: formatTrainingText(draft.task),
     context: `${topic}训练｜${difficultyTask[difficulty]}`,
-    facts: draft.facts,
+    facts: draft.facts.map(formatTrainingText),
     level: draft.level,
     cards: draft.cards ?? [],
-    ...rotateOptions(draft.correct, draft.distractors, variant),
-    explanation: draft.explanation,
-    reasoning: draft.reasoning,
-    principle: draft.principle,
-    hint: draft.hint,
+    options: rotatedOptions.options.map(formatTrainingText),
+    answer: rotatedOptions.answer,
+    explanation: formatTrainingText(draft.explanation),
+    reasoning: [
+      formatTrainingText(draft.reasoning[0]),
+      formatTrainingText(draft.reasoning[1]),
+      formatTrainingText(draft.reasoning[2]),
+    ],
+    principle: formatTrainingText(draft.principle),
+    hint: formatTrainingText(draft.hint),
     difficulty,
     topic,
     estimatedSeconds: estimatedSeconds[difficulty],
@@ -478,7 +496,7 @@ function patternQuestion(
       distractorPool[(variant + 4) % distractorPool.length],
       distractorPool[(variant + 7) % distractorPool.length],
     ],
-    explanation: `全部牌合在一起满足${structure}，所以应识别为${correct}`,
+    explanation: `全部牌合在一起满足 ${structure}，所以应识别为 ${correct}`,
     reasoning: [
       `先确认总数为 ${cards.length} 张`,
       `再核对结构：${structure}`,
@@ -722,7 +740,7 @@ function wildQuestion(
         "优先放进已经完整的组合",
         "只按逢人配自身点数决定补位，不比较剩余手数",
       ],
-      explanation: `多种用法都合法时，应比较哪种用法能完成整组并减少总手数；本题补${missing}得到${result}`,
+      explanation: `多种用法都合法时，应比较哪种用法能完成整组并减少总手数；本题补 ${missing}，得到 ${result}`,
       reasoning: [
         "先列出所有合法补位",
         `再看补${missing}后能完成${result}`,
