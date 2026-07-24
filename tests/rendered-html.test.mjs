@@ -46,9 +46,15 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(css, /\.next-turn-cue/);
   assert.match(css, /next-turn-progress/);
   assert.match(css, /\.quiz-reasoning/);
+  assert.match(css, /\.toolbar-setting/);
+  assert.match(css, /\.teaching-takeaways/);
   assert.match(css, /\.card-face\.is-selected:{1,2}after/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(server, /vinext/);
+  assert.doesNotMatch(
+    javascript,
+    /判断信心|综合评分|分代价|与首选相差\s*\d+(?:\.\d+)?\s*分/
+  );
   assert.doesNotMatch(
     `${javascript}\n${css}`,
     /Your site is taking shape|react-loading-skeleton/

@@ -120,11 +120,22 @@ const difficultyMeta: Record<
 
 const playbackPaceMeta: Record<
   PlaybackPace,
-  { name: string; delay: number }
+  { name: string; shortName: string; delay: number }
 > = {
-  slow: { name: "慢速讲解", delay: 3400 },
-  standard: { name: "标准节奏", delay: 2300 },
-  fast: { name: "快速演练", delay: 1400 },
+  slow: { name: "慢速讲解", shortName: "慢速", delay: 3400 },
+  standard: { name: "标准节奏", shortName: "标准", delay: 2300 },
+  fast: { name: "快速演练", shortName: "快速", delay: 1400 },
+};
+
+const qualityTeachingMeta: Record<
+  DecisionExplanation["quality"],
+  { label: string; cue: string }
+> = {
+  精确: { label: "这手很合适", cue: "可以重点记住这条思路" },
+  稳健: { label: "稳妥可走", cue: "风险不大，后手也比较完整" },
+  可行: { label: "能走但不够顺", cue: "先比较有没有更省牌的办法" },
+  冒险: { label: "风险较高", cue: "出牌前先想清失败后的退路" },
+  失误: { label: "不建议这样走", cue: "这手会让后续明显变难" },
 };
 
 const topicDescriptions: Record<TrainingTopic, string> = {
@@ -151,6 +162,56 @@ function skillPercent(
 ) {
   const skill = progress.skills.find((item) => item.skill === topic);
   return skill?.attempted ? percent(skill.correct, skill.attempted) : fallback;
+}
+
+function factorTeachingStatus(
+  factor: DecisionExplanation["factors"][number]
+) {
+  if (factor.tone === "positive") return "有帮助";
+  if (factor.tone === "negative") return "要小心";
+  return "影响不大";
+}
+
+function factorTeachingText(
+  factor: DecisionExplanation["factors"][number]
+) {
+  const positive = factor.tone === "positive";
+  const negative = factor.tone === "negative";
+
+  switch (factor.label) {
+    case "减少手数":
+      return positive
+        ? "这手能成组出掉多张牌，后面需要重新争牌权的次数会更少"
+        : "这手能出，但没有明显缩短整手牌的出完路线";
+    case "保留控制":
+      return negative
+        ? "这手会提前用掉大牌或逢人配，后面想抢回牌权会更难"
+        : "关键大牌没有被明显浪费，后面仍有接管牌权的机会";
+    case "保留牌力":
+      return positive
+        ? "先不接可以保住完整组合，等更合适的牌型再一起打出去"
+        : "保留下来的牌暂时没有形成更清楚的后续路线";
+    case "放弃牌权":
+      return negative
+        ? "让过以后对手可能连续出牌，必须确认他不会很快走完"
+        : "暂时让出这一轮不会立刻造成危险，可以等待更好的接牌机会";
+    case "搭档协同":
+      return negative
+        ? "这手可能盖住搭档已经拿到的牌权，除非你能马上收尾，否则不划算"
+        : positive
+          ? "这手让搭档继续掌握节奏，或为搭档留下更容易接上的牌型"
+          : "目前看不出对搭档有明显帮助或妨碍，还要结合下一手判断";
+    case "残局压力":
+      return positive
+        ? "这手让你更接近一次出完，或及时阻止了即将走完的对手"
+        : "当前还没到必须抢牌权的收尾阶段，不必为了眼前一手过度消耗";
+    default:
+      return positive
+        ? "这项变化让后续路线更顺"
+        : negative
+          ? "这项变化会让后续选择变少"
+          : "这项变化对当前局面影响有限";
+  }
 }
 
 function advanceAiGame(current: GameState, difficulty: Difficulty): GameState {
@@ -635,37 +696,51 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
           <section className="workspace-grid">
             <div className="table-panel">
               <div className="table-toolbar">
-                <div className="segmented-control" aria-label="对手难度">
-                  {(Object.keys(difficultyMeta) as Difficulty[]).map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      className={difficulty === level ? "active" : ""}
-                      onClick={() => setDifficulty(level)}
-                    >
-                      {difficultyMeta[level].name}
-                    </button>
-                  ))}
+                <div className="toolbar-setting difficulty-setting">
+                  <span className="toolbar-label">
+                    <Bot size={15} />
+                    对手
+                  </span>
+                  <div className="segmented-control" aria-label="对手难度">
+                    {(Object.keys(difficultyMeta) as Difficulty[]).map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        className={difficulty === level ? "active" : ""}
+                        onClick={() => setDifficulty(level)}
+                        aria-pressed={difficulty === level}
+                      >
+                        {difficultyMeta[level].name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="table-tools">
-                  <label className="pace-control">
-                    <span>出牌节奏</span>
-                    <select
-                      value={playbackPace}
-                      onChange={(event) =>
-                        setPlaybackPace(event.target.value as PlaybackPace)
-                      }
-                      aria-label="出牌节奏"
-                    >
-                      {(Object.keys(playbackPaceMeta) as PlaybackPace[]).map(
-                        (pace) => (
-                          <option value={pace} key={pace}>
-                            {playbackPaceMeta[pace].name}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </label>
+                <div className="toolbar-setting pace-setting">
+                  <span className="toolbar-label">
+                    <Clock3 size={15} />
+                    节奏
+                  </span>
+                  <div
+                    className="segmented-control pace-segments"
+                    aria-label="出牌节奏"
+                  >
+                    {(Object.keys(playbackPaceMeta) as PlaybackPace[]).map(
+                      (pace) => (
+                        <button
+                          type="button"
+                          key={pace}
+                          className={playbackPace === pace ? "active" : ""}
+                          onClick={() => setPlaybackPace(pace)}
+                          aria-pressed={playbackPace === pace}
+                          title={playbackPaceMeta[pace].name}
+                        >
+                          {playbackPaceMeta[pace].shortName}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+                <div className="table-tools" aria-label="牌桌工具">
                   <button
                     className={`icon-action playback-action${
                       autoPlayback ? " active" : ""
@@ -673,9 +748,11 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                     type="button"
                     onClick={() => setAutoPlayback((enabled) => !enabled)}
                     aria-pressed={autoPlayback}
+                    aria-label={autoPlayback ? "暂停连播" : "继续连播"}
+                    title={autoPlayback ? "暂停连播" : "继续连播"}
                   >
                     {autoPlayback ? <Pause size={16} /> : <CirclePlay size={16} />}
-                    {autoPlayback ? "暂停连播" : "继续连播"}
+                    <span>{autoPlayback ? "暂停" : "继续"}</span>
                   </button>
                   <button
                     className={`icon-action vision-action${
@@ -686,7 +763,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                     aria-pressed={trainingVision}
                   >
                     {trainingVision ? <EyeOff size={16} /> : <Eye size={16} />}
-                    {trainingVision ? "隐藏透视" : "训练透视"}
+                    <span>{trainingVision ? "隐藏透视" : "训练透视"}</span>
                   </button>
                   <button
                     className="icon-action"
@@ -694,7 +771,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                     onClick={startNewGame}
                   >
                     <RefreshCw size={16} />
-                    新局
+                    <span>新局</span>
                   </button>
                 </div>
               </div>
@@ -1015,9 +1092,9 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                         <span
                           className={`quality quality-${activeCoach.quality}`}
                         >
-                          {activeCoach.quality}
+                          {qualityTeachingMeta[activeCoach.quality].label}
                         </span>
-                        <span>判断信心 {activeCoach.confidence}%</span>
+                        <span>{qualityTeachingMeta[activeCoach.quality].cue}</span>
                       </div>
                       <h2>{activeCoach.headline}</h2>
                       <p className="coach-summary">{activeCoach.reason}</p>
@@ -1029,47 +1106,47 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                         <CoachQuestionButton
                           active={coachQuestion === "evidence"}
                           icon={<Search size={14} />}
-                          label="凭什么"
+                          label="为什么"
                           onClick={() => setCoachQuestion("evidence")}
                         />
                         <CoachQuestionButton
                           active={coachQuestion === "risk"}
                           icon={<TriangleAlert size={14} />}
-                          label="风险呢"
+                          label="怕什么"
                           onClick={() => setCoachQuestion("risk")}
                         />
                         <CoachQuestionButton
                           active={coachQuestion === "partner"}
                           icon={<Users size={14} />}
-                          label="搭档呢"
+                          label="看搭档"
                           onClick={() => setCoachQuestion("partner")}
                         />
                         <CoachQuestionButton
                           active={coachQuestion === "compare"}
                           icon={<Route size={14} />}
-                          label="还有呢"
+                          label="换一手"
                           onClick={() => setCoachQuestion("compare")}
                         />
                       </div>
 
                       {coachQuestion === "evidence" && (
                         <CoachAnswer
-                          title="判断链，不只给结论"
+                          title="这手为什么这样走"
                           intro={activeCoach.consequence}
                           items={activeCoach.evidence}
                         />
                       )}
                       {coachQuestion === "risk" && (
                         <CoachAnswer
-                          title="最坏情况与代价"
-                          intro="先看失败会失去什么，再决定是否值得冒险"
+                          title="这手最怕什么"
+                          intro="先看走完以后会留下什么麻烦，再决定要不要出"
                           items={activeCoach.risks}
                           tone="warning"
                         />
                       )}
                       {coachQuestion === "partner" && (
                         <CoachAnswer
-                          title="把搭档放进同一条路线"
+                          title="搭档会受到什么影响"
                           intro={activeCoach.partnerRead}
                           items={activeCoach.nextSteps}
                         />
@@ -1087,25 +1164,27 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                         />
                       )}
 
-                      <div className="factor-list">
+                      <div className="teaching-takeaways">
+                        <strong>把这一手记成四个问题</strong>
                         {activeCoach.factors.map((factor) => (
-                          <div className="factor" key={factor.label}>
-                            <span>{factor.label}</span>
-                            <div className="factor-track">
-                              <i
-                                className={factor.tone}
-                                style={{
-                                  width: `${Math.min(
-                                    100,
-                                    Math.max(12, 50 + factor.value * 5)
-                                  )}%`,
-                                }}
-                              />
+                          <div
+                            className={`teaching-factor ${factor.tone}`}
+                            key={factor.label}
+                          >
+                            <span aria-hidden="true">
+                              {factor.tone === "positive" ? (
+                                <Check size={14} />
+                              ) : factor.tone === "negative" ? (
+                                <TriangleAlert size={14} />
+                              ) : (
+                                <CircleHelp size={14} />
+                              )}
+                            </span>
+                            <div>
+                              <strong>{factor.label}</strong>
+                              <p>{factorTeachingText(factor)}</p>
                             </div>
-                            <strong>
-                              {factor.value > 0 ? "+" : ""}
-                              {factor.value}
-                            </strong>
+                            <em>{factorTeachingStatus(factor)}</em>
                           </div>
                         ))}
                       </div>
@@ -1845,7 +1924,7 @@ function CandidateComparison({
             <p>
               {recordedAlternative.label}，{recordedAlternative.reason}
             </p>
-            <small>与首选相差 {recordedAlternative.delta} 分</small>
+            <small>复盘重点：比较两条路线出完以后，哪一条更容易继续出牌</small>
           </>
         ) : (
           <p>当前处于历史复盘或等待阶段，回到实时轮次后可以直接试选候选路线</p>
@@ -1857,8 +1936,8 @@ function CandidateComparison({
   return (
     <div className="candidate-list">
       <div>
-        <strong>三条可比较路线</strong>
-        <span>点击后只试选，不会自动出牌</span>
+        <strong>三条可以试走的路线</strong>
+        <span>先看后手，再决定</span>
       </div>
       {candidates.map((candidate, index) => (
         <button
@@ -1874,7 +1953,9 @@ function CandidateComparison({
             <strong>{candidate.pattern?.label ?? "过牌"}</strong>
             <p>{candidate.summary}</p>
           </div>
-          <em>{Math.round(candidate.score * 10) / 10}</em>
+          <em>
+            {index === 0 ? "更推荐" : index === 1 ? "可比较" : "另一种"}
+          </em>
         </button>
       ))}
     </div>

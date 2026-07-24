@@ -259,58 +259,130 @@ button:focus-visible {
 }
 
 .table-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(360px, 1.15fr) minmax(245px, 0.8fr) auto;
   align-items: center;
-  justify-content: space-between;
-  min-height: 62px;
-  padding: 10px 15px;
+  min-height: 74px;
+  padding: 11px 12px;
+  gap: 9px;
   border-bottom: 1px solid var(--line);
+  background: rgba(244, 243, 237, 0.82);
+}
+
+.toolbar-setting {
+  display: flex;
+  min-width: 0;
+  min-height: 50px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px;
+  border: 1px solid rgba(23, 32, 28, 0.1);
+  border-radius: 15px;
+  background: rgba(255, 254, 250, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.toolbar-label {
+  display: inline-flex;
+  min-width: 58px;
+  align-items: center;
+  gap: 6px;
+  padding-left: 7px;
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .segmented-control {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
   padding: 3px;
-  border-radius: 10px;
-  background: #eae9e2;
+  border-radius: 11px;
+  background: #ecebe5;
 }
 
 .segmented-control button {
-  padding: 7px 11px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 9px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--ink-soft);
   cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.segmented-control button:hover {
+  color: var(--green-deep);
 }
 
 .segmented-control button.active {
-  background: var(--paper-strong);
-  box-shadow: 0 2px 10px rgba(23, 32, 28, 0.1);
-  color: var(--ink);
-  font-weight: 700;
+  background: var(--green-deep);
+  box-shadow: 0 5px 13px rgba(15, 57, 43, 0.2);
+  color: #fff;
+}
+
+.pace-setting {
+  min-width: 245px;
+}
+
+.pace-segments button {
+  padding-inline: 7px;
 }
 
 .icon-action {
-  display: flex;
+  display: inline-flex;
+  min-height: 50px;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  padding: 8px 11px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: transparent;
+  padding: 0 13px;
+  border: 1px solid rgba(23, 32, 28, 0.12);
+  border-radius: 15px;
+  background: rgba(255, 254, 250, 0.82);
   cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.icon-action:hover {
+  border-color: rgba(23, 79, 59, 0.3);
+  background: #fffefa;
+  color: var(--green-deep);
+  transform: translateY(-1px);
 }
 
 .table-tools {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
-.vision-action.active {
-  border-color: rgba(23, 98, 63, 0.34);
-  background: var(--green-soft);
-  color: var(--green);
+.vision-action.active,
+.playback-action.active {
+  border-color: rgba(23, 79, 59, 0.28);
+  background: rgba(220, 232, 223, 0.76);
+  color: var(--green-deep);
+  box-shadow: inset 0 0 0 1px rgba(23, 79, 59, 0.05);
 }
 
 .vision-drawer {
@@ -664,12 +736,6 @@ button:focus-visible {
   gap: 6px;
 }
 
-.playback-action.active {
-  border-color: rgba(23, 79, 59, 0.24);
-  background: var(--green-soft);
-  color: var(--green);
-}
-
 @keyframes action-arrived {
   from {
     opacity: 0;
@@ -697,25 +763,6 @@ button:focus-visible {
   min-height: 100px;
   place-items: center;
   gap: 8px;
-}
-
-.pace-control {
-  display: grid;
-  gap: 2px;
-  color: var(--ink-soft);
-  font-size: 9px;
-}
-
-.pace-control select {
-  min-height: 34px;
-  padding: 0 28px 0 9px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--paper-strong);
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .played-pattern > strong {
@@ -1131,8 +1178,14 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   color: var(--ink-soft);
   font-size: 11px;
+}
+
+.quality-row > span:last-child {
+  max-width: 190px;
+  text-align: right;
 }
 
 .quality {
@@ -1284,7 +1337,7 @@ button:focus-visible {
 
 .candidate-list > button {
   display: grid;
-  grid-template-columns: 25px 1fr 36px;
+  grid-template-columns: 25px minmax(0, 1fr) 56px;
   align-items: center;
   gap: 8px;
   padding: 9px;
@@ -1326,11 +1379,9 @@ button:focus-visible {
 
 .candidate-list > button p {
   margin: 3px 0 0;
-  overflow: hidden;
   color: var(--ink-soft);
   font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
 }
 
 .candidate-list > button em {
@@ -1350,42 +1401,86 @@ button:focus-visible {
   font-size: 12px;
 }
 
-.factor-list {
+.teaching-takeaways {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   margin: 12px 0;
 }
 
-.factor {
+.teaching-takeaways > strong {
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.teaching-factor {
   display: grid;
-  grid-template-columns: 66px 1fr 28px;
-  align-items: center;
+  grid-template-columns: 27px minmax(0, 1fr) auto;
+  align-items: start;
   gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 254, 250, 0.72);
   color: var(--ink-soft);
-  font-size: 11px;
 }
 
-.factor-track {
-  height: 5px;
-  overflow: hidden;
-  border-radius: 99px;
-  background: #e1e2dd;
+.teaching-factor > span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eceeea;
+  color: var(--ink-soft);
 }
 
-.factor-track i {
+.teaching-factor.positive > span {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.teaching-factor.negative > span {
+  background: #f8dfda;
+  color: var(--red);
+}
+
+.teaching-factor > div {
+  min-width: 0;
+}
+
+.teaching-factor strong {
   display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: #98a49d;
-  transition: width 220ms ease;
+  color: var(--ink);
+  font-size: 10px;
 }
 
-.factor-track i.positive {
-  background: #3b8963;
+.teaching-factor p {
+  margin: 3px 0 0;
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
-.factor-track i.negative {
-  background: #c75a51;
+.teaching-factor em {
+  margin-top: 2px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #eceeea;
+  color: var(--ink-soft);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.teaching-factor.positive em {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.teaching-factor.negative em {
+  background: #f8dfda;
+  color: var(--red);
 }
 
 .alternative-card {
@@ -2516,6 +2611,17 @@ button:focus-visible {
   font-size: 15px;
 }
 
+@media (max-width: 1400px) {
+  .table-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.78fr);
+  }
+
+  .table-tools {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1160px) {
   .workspace-grid {
     grid-template-columns: 1fr;
@@ -2572,6 +2678,15 @@ button:focus-visible {
   .hero-strip {
     align-items: start;
     flex-direction: column;
+  }
+
+  .table-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .table-tools {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .training-layout,
@@ -2639,37 +2754,36 @@ button:focus-visible {
   }
 
   .table-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 8px;
+    padding: 9px;
   }
 
   .segmented-control button {
-    flex: 1;
     padding-inline: 6px;
     font-size: 11px;
   }
 
-  .icon-action {
-    justify-content: center;
+  .toolbar-setting,
+  .pace-setting {
+    width: 100%;
+    min-width: 0;
   }
 
-  .table-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 8px;
+  .toolbar-label {
+    min-width: 52px;
   }
 
   .table-tools {
-    display: grid;
+    grid-column: auto;
     grid-template-columns: 1fr 1fr;
   }
 
-  .pace-control {
-    grid-column: 1 / -1;
+  .playback-action {
+    grid-column: auto;
   }
 
-  .playback-action {
+  .table-tools .icon-action:last-child {
     grid-column: 1 / -1;
   }
 

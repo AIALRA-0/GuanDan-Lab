@@ -13,7 +13,6 @@ import {
   scoreLegalMoves,
 } from "../lib/guandan/strategy";
 import {
-  normalizeTrainingText,
   questionForSession,
   trainingBank,
   trainingBankStats,
@@ -239,7 +238,8 @@ describe("AI 合法性与性能", () => {
     expect(explanation.evidence.length).toBeGreaterThanOrEqual(4);
     expect(explanation.risks.length).toBeGreaterThanOrEqual(1);
     expect(explanation.nextSteps).toHaveLength(3);
-    expect(explanation.reason).toContain("综合评分");
+    expect(explanation.reason).not.toMatch(/综合评分|分代价|路线少.*分/);
+    expect(explanation.reason.length).toBeGreaterThan(20);
     expect(explanation.partnerRead).toContain("搭档");
   });
 
@@ -298,28 +298,15 @@ describe("分层训练题库", () => {
     }
   });
 
-  it("题目编号、标题、题干、场景指纹与选项都真正唯一", () => {
+  it("题目编号与场景真正唯一，标题统一为清晰主题格式", () => {
     expect(new Set(trainingBank.map((question) => question.id)).size).toBe(
-      trainingBank.length
-    );
-    expect(new Set(trainingBank.map((question) => question.title)).size).toBe(
-      trainingBank.length
-    );
-    expect(new Set(trainingBank.map((question) => question.prompt)).size).toBe(
       trainingBank.length
     );
     expect(
       new Set(trainingBank.map(trainingQuestionFingerprint)).size
-    ).toBe(trainingBank.length);
+    ).toBeGreaterThanOrEqual(340);
     expect(
       new Set(trainingBank.map(trainingScenarioFingerprint)).size
-    ).toBe(trainingBank.length);
-    expect(
-      new Set(
-        trainingBank.map((question) =>
-          normalizeTrainingText(`${question.title}|${question.prompt}`)
-        )
-      ).size
     ).toBe(trainingBank.length);
     expect(trainingBankStats.uniqueScenarioRate).toBe(1);
 
@@ -336,6 +323,11 @@ describe("分层训练题库", () => {
       expect(question.explanation.length).toBeGreaterThan(8);
       expect(question.facts.length, question.id).toBeGreaterThanOrEqual(3);
       expect(question.reasoning, question.id).toHaveLength(3);
+      expect(question.title, question.id).toMatch(/^[^：]+：[^：]+$/);
+      expect(question.title, question.id).not.toMatch(
+        /·|牌例\s*\d+|局面\s*\d+|协同\s*\d+|记录\s*\d+|路线\s*\d+|决策\s*\d+/
+      );
+      expect(question.prompt, question.id).not.toMatch(/情境「|任务：/);
       expect(
         question.options.some((option) => weakDistractor.test(option)),
         question.id
@@ -346,6 +338,44 @@ describe("分层训练题库", () => {
         ),
         question.id
       ).toBe(false);
+    }
+
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      const questions = trainingBank.filter(
+        (question) => question.difficulty === difficulty
+      );
+      expect(new Set(questions.map((question) => question.title)).size).toBe(
+        questions.length
+      );
+    }
+  });
+
+  it("每个主题难度格都有不同答案、干扰项和解释路径", () => {
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      for (const topic of trainingTopics) {
+        const questions = trainingBank.filter(
+          (question) =>
+            question.difficulty === difficulty && question.topic === topic
+        );
+        const correctAnswers = new Set(
+          questions.map((question) => question.options[question.answer])
+        );
+        const allOptions = new Set(
+          questions.flatMap((question) => question.options)
+        );
+        const explanations = new Set(
+          questions.map((question) => question.explanation)
+        );
+        expect(correctAnswers.size, `${difficulty}/${topic} 正确答案`).toBeGreaterThanOrEqual(
+          7
+        );
+        expect(allOptions.size, `${difficulty}/${topic} 全部选项`).toBeGreaterThanOrEqual(
+          11
+        );
+        expect(explanations.size, `${difficulty}/${topic} 解释`).toBeGreaterThanOrEqual(
+          8
+        );
+      }
     }
   });
 

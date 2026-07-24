@@ -250,6 +250,17 @@ interface QuestionDraft {
   expectedPatternType?: PatternType;
 }
 
+function clearCaseName(caseName: string): string {
+  return caseName
+    .replace(
+      /\s*·\s*(?:牌例|局面|协同|记录|路线|决策)\s*\d+\s*$/,
+      ""
+    )
+    .replace(/\s*·\s*/g, "，")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function makeQuestion(
   topic: TrainingTopic,
   difficulty: TrainingDifficulty,
@@ -257,10 +268,11 @@ function makeQuestion(
   draft: QuestionDraft
 ): TrainingQuestion {
   const id = `${difficulty}-${topicIds[topic]}-${variant}`;
+  const caseName = clearCaseName(draft.caseName);
   return {
     id,
-    title: `${trainingDifficultyMeta[difficulty].name} · ${draft.caseName}`,
-    prompt: `情境「${draft.caseName}」· ${trainingDifficultyMeta[difficulty].name}任务：${draft.task}`,
+    title: `${topic}：${caseName}`,
+    prompt: draft.task,
     context: `${topic}训练｜${difficultyTask[difficulty]}`,
     facts: draft.facts,
     level: draft.level,
@@ -549,9 +561,9 @@ function wildQuestion(
 
   const correctByDifficulty: Record<TrainingDifficulty, string> = {
     foundation: `把逢人配当作${missing}`,
-    intermediate: `补成${result}`,
-    advanced: `补成${result}，把这组牌缩短为 1 手`,
-    master: `本轮用逢人配完成${result}，同时保留其余完整组合`,
+    intermediate: `用逢人配补上${missing}，组成${result}`,
+    advanced: `用逢人配补上${missing}，把${result}一次打完`,
+    master: `用逢人配补上${missing}完成${result}，其余完整组合不拆`,
   };
   const correct = correctByDifficulty[difficulty];
   return makeQuestion("逢人配", difficulty, variant, {
@@ -588,14 +600,14 @@ function wildQuestion(
           ]
         : difficulty === "intermediate"
           ? [
-              "保留为单张级牌",
-              "拆成两个更小组合",
-              "改补另一组已经完整的牌",
+              `把逢人配留成单张级牌，让${missing}继续缺失`,
+              `拆开现有牌，分成两手而不组成${result}`,
+              `把逢人配放进已经完整的牌组，仍留下${missing}`,
             ]
           : [
-              "先保留逢人配，再把本组拆成多手",
-              "把逢人配放进已经完整的对子",
-              "为了牌点更大而增加剩余手数",
+              `保留逢人配不补${missing}，把本组拆成多手`,
+              `把逢人配放进已经完整的对子，放弃${result}`,
+              `只追求牌点更大，却让${result}无法一次打完`,
             ],
     explanation: `逢人配正好补上${missing}，整组牌可以形成${result}`,
     reasoning: [
@@ -661,20 +673,20 @@ function controlQuestion(
     correct = `用同型且更大的牌压制${leadPattern}`;
   } else if (urgent) {
     correct = clearNext
-      ? "用最低够大的同型牌接管，并接着出完整组合"
-      : "先接管阻止下家出完，再保留最高控制牌";
+      ? `下家只剩 ${opponent} 张，先用能压过${leadPattern}的最低同型牌接管，再出完整组合`
+      : `下家只剩 ${opponent} 张，先接管阻止其出完，同时保留最高控制牌`;
   } else if (partnerControls) {
-    correct = "让搭档继续持权，保留自己的接管牌";
+    correct = `搭档还有明确控制牌，先让其处理${leadPattern}，自己保留接管牌`;
   } else if (clearNext) {
-    correct = "接管牌权，并按计划打出下一组完整牌";
+    correct = `用能压过${leadPattern}的最低同型牌接管，随后打出已有完整组合`;
   } else {
-    correct = "暂时让过，等待有明确下一手的接管机会";
+    correct = `现在接管${leadPattern}后没有顺畅下一手，先让过并等待更好的接管机会`;
   }
   return makeQuestion("牌权控制", difficulty, variant, {
     caseName: `${tableCaseNames[index]} · 局面 ${variant + 1}`,
     task:
       difficulty === "foundation"
-        ? "不使用炸弹时，普通牌怎样才能合法压制"
+        ? `如果不用炸弹，哪一种普通牌能合法压制桌面的${leadPattern}`
         : "你有更大的同型牌，现在最合理的选择是什么",
     facts: [
       `当前打 ${level}`,
@@ -695,20 +707,27 @@ function controlQuestion(
     distractors:
       difficulty === "foundation"
         ? [
-            "换成张数更多但不同类型的普通牌",
-            "用同点数但更长的普通牌",
-            "用更小的同型牌试着取得牌权",
+            `换成张数更多但不同类型的普通牌去压${leadPattern}`,
+            `用同点数但张数不同的普通牌去压${leadPattern}`,
+            `用比${leadPattern}更小的同型牌试着取得牌权`,
           ]
         : [
-            "现在接管，但不安排接管后的下一手",
-            "拆开已有完整组合来追求更高牌点",
-            "把本轮和后续拦截都交给搭档处理",
+            `只因为能压过${leadPattern}就立即接管，不考虑下一手`,
+            `拆开接管后本可保留的完整组合，只追求更高牌点`,
+            `下家还剩 ${opponent} 张，却把本轮和后续拦截都交给搭档`,
           ],
-    explanation: urgent
-      ? "对手接近出完时，先阻止其出完，再选择成本最低且能继续组织的接管方式"
-      : clearNext
-        ? "接管后有明确下一手，控制牌能够真正转化为减少手数"
-        : "接管后没有可走的完整组合时，赢下一手可能只是把难题留给自己",
+    explanation:
+      difficulty === "foundation"
+        ? `普通牌必须与${leadPattern}牌型相同、张数相同且点数更大才能压制；本题虽然能合法接管，但${
+            clearNext
+              ? "接管后还有完整组合可走，牌权才容易继续产生价值"
+              : "接管后只剩散牌，实战中还要继续判断这次接管是否值得"
+          }`
+        : urgent
+          ? `下家只剩 ${opponent} 张，先用能压住${leadPattern}的最低成本路线阻断，再安排下一手`
+          : clearNext
+            ? `压过${leadPattern}后还有完整组合可出，这次接管才能真正缩短出完路线`
+            : `压过${leadPattern}后没有完整组合可走，赢下这一手只会把散牌难题留给自己`,
     reasoning: [
       `先看威胁，下家剩 ${opponent} 张`,
       clearNext ? "再看后续，你有完整组合可继续出" : "再看后续，你没有顺畅的下一手",
@@ -736,21 +755,57 @@ function partnerQuestion(
   const urgent = opponent <= 4;
   const partnerHasLead = (variant + cycle) % 3 !== 1;
   const level = NORMAL_RANKS[(variant * 3 + 5) % 13];
+  const foundationTasks = [
+    "固定座位不变时，怎样确认自己的搭档",
+    "对手刚赢下一手时，第一步应观察什么",
+    "搭档已经持权且没有立即威胁时，应该怎样配合",
+    "搭档持权但下家接近出完时，应该提前准备什么",
+    "只看到搭档一次过牌时，能得出什么结论",
+    "搭档持权且下家仍有多张牌时，是否需要覆盖",
+    "下家进入一手出完范围时，如何帮助搭档防守",
+    "对手持权但没有收尾威胁时，怎样保存己方实力",
+    "己方已经控制这一手时，为什么不必重复抢牌",
+    "搭档多次让牌后，应该怎样更新判断",
+  ];
+  const foundationAnswers = [
+    "先认准正对面的玩家，他是整局固定不变的搭档",
+    "先确认牌权在对方手里，再比较搭档与下家的剩余张数",
+    `搭档已经持权且下家还有 ${opponent} 张，先让搭档继续出`,
+    `下家只剩 ${opponent} 张，保留能接住其最后一手的同型牌`,
+    `一次过牌只说明搭档这次没接，不能据此断定他没有大牌`,
+    `下家还有 ${opponent} 张且搭档已持权，不覆盖搭档，保留自己的高牌`,
+    `下家只剩 ${opponent} 张，提前准备接管，防止其一手出完`,
+    `对手持权但下家还有 ${opponent} 张，先观察一轮并保留接管牌`,
+    `搭档已经拿到牌权，自己重复盖牌只会消耗同队的控制牌`,
+    `把连续 ${passes} 次让牌当作线索，再结合牌型和剩余张数判断`,
+  ];
+  const foundationExplanations = [
+    "四人掼蛋中，对家是固定搭档，先认清队伍关系才能判断让牌和接风",
+    "先分清牌权属于哪一队，再判断是否需要抢回，而不是一看到能压就出牌",
+    "己方已经控制牌桌时，没有紧急威胁就应避免自己人互相盖牌",
+    "对手接近出完时，即使搭档当前持权，也要提前保留对应拦截",
+    "过牌是一条公开线索，不等于完整展示手牌，结论必须保留余地",
+    "搭档能继续控制时，让牌可以保住自己的高牌，留给下一次真正危险的回合",
+    "剩余张数已经进入一手牌范围时，协同重点从省牌转为阻断",
+    "没有立即危险时，保存接管牌比无目的争一手更有价值",
+    "同队重复使用高牌不会增加牌权，只会减少后续防守能力",
+    "连续行动比单次行动更有参考价值，但仍不能替代牌型和张数判断",
+  ];
   const correct =
     difficulty === "foundation"
-      ? "与你相对而坐的玩家是固定搭档"
+      ? foundationAnswers[index]
       : urgent
-        ? "准备接管并阻止下家一手出完"
+        ? `下家只剩 ${opponent} 张，准备接管并阻止其一手出完`
         : partnerHasLead
-          ? "先让搭档继续持权，保留自己的高牌"
+          ? `搭档已经持权且还有 ${partner} 张，先让其继续出，自己保留高牌`
           : passes >= 2
-            ? "把连续让牌视为弱信号，继续结合牌型判断"
-            : "观察一轮再决定，不把一次过牌当成确定事实";
+            ? `搭档连续让牌 ${passes} 次，把它当作线索并继续结合牌型判断`
+            : `对手当前持权，先观察一轮，不把搭档一次过牌当成确定事实`;
   return makeQuestion("搭档协同", difficulty, variant, {
     caseName: `${tableCaseNames[(variant + 6) % 10]} · 协同 ${variant + 1}`,
     task:
       difficulty === "foundation"
-        ? "四人固定座位中，先确认谁是你的搭档"
+        ? foundationTasks[index]
         : "结合牌权和剩余张数，你应该如何配合",
     facts: [
       `当前打 ${level}`,
@@ -769,21 +824,34 @@ function partnerQuestion(
     correct,
     distractors:
       difficulty === "foundation"
-        ? ["你的上家是固定搭档", "你的下家是固定搭档", "每轮重新选择搭档"]
+        ? index === 0
+          ? ["把上家当作固定搭档", "把下家当作固定搭档", "每轮重新选择搭档"]
+          : [
+              `不管牌权在${partnerHasLead ? "搭档" : "对手"}手里，立即打出自己最大的牌`,
+              `只看搭档还剩 ${partner} 张，不看下家还剩 ${opponent} 张`,
+              `把搭档让牌 ${passes} 次直接解释成他完全没有控制牌`,
+            ]
         : [
-            "立刻覆盖搭档，优先减少自己一张牌",
-            "仅凭一次行动判断搭档没有大牌",
-            "只看自己的牌，不使用搭档剩余张数",
+            `不看下家还剩 ${opponent} 张，立刻覆盖搭档并只减少自己一张牌`,
+            `仅凭搭档让牌 ${passes} 次就断定他没有大牌`,
+            `只看自己的牌，不比较搭档 ${partner} 张与下家 ${opponent} 张`,
           ],
-    explanation: urgent
-      ? "下家进入一手出完范围后，阻断优先级高于平常让牌"
-      : partnerHasLead
-        ? "己方已经控制当前一手，没有紧急威胁时应节省重复控制"
-        : "搭档行动只能提供线索，仍要结合张数、牌型和后续行动更新",
+    explanation:
+      difficulty === "foundation"
+        ? foundationExplanations[index]
+        : urgent
+          ? "下家进入一手出完范围后，阻断优先级高于平常让牌"
+          : partnerHasLead
+            ? `搭档已经控制当前一手，下家还有 ${opponent} 张时应节省重复控制`
+            : `搭档让牌 ${passes} 次只能提供线索，还要结合其 ${partner} 张手牌和后续行动更新`,
     reasoning: [
-      "先确认当前牌权属于己方还是对手",
+      difficulty === "foundation"
+        ? `先回答本题关注的是座位、牌权、张数还是公开行动`
+        : "先确认当前牌权属于己方还是对手",
       `再比较搭档 ${partner} 张与下家 ${opponent} 张的紧迫程度`,
-      "最后决定是保留控制牌，还是立即替搭档阻断",
+      difficulty === "foundation"
+        ? `最后只根据已知信息选择，不把让牌 ${passes} 次解释成完整手牌`
+        : "最后决定是保留控制牌，还是立即替搭档阻断",
     ],
     principle: "搭档协同依赖可更新的线索，不把一次过牌解释成确定手牌",
     hint: "先判断下家是否已经可能一手出完",
@@ -906,18 +974,19 @@ function bombQuestion(
   ];
   const urgent = opponent <= 3;
   const level = NORMAL_RANKS[(variant * 5 + 1) % 13];
+  const bombRank = level === "9" ? "8" : "9";
   const correct =
     difficulty === "foundation"
-      ? `${size} 张同点牌构成炸弹`
+      ? `${size} 张 ${bombRank} 构成炸弹；下家剩 ${opponent} 张不改变牌型结论`
       : urgent
         ? hasNext
-          ? "现在用炸弹阻断，并接着打出完整组合"
-          : "用较低层级炸弹阻断，保留最高控制牌"
+          ? `下家只剩 ${opponent} 张，现在用 ${size} 张炸弹阻断，再接着出完整组合`
+          : `下家只剩 ${opponent} 张，用较低层级炸弹阻断，同时保留最高控制牌`
         : partnerCover
-          ? "先让搭档处理，保留炸弹用于关键回合"
+          ? `搭档还有控制牌，先让其处理，保留 ${size} 张炸弹给收尾回合`
           : hasNext
-            ? "只在能换来连续出牌时使用炸弹"
-            : "暂时保留炸弹，等待更关键的牌权交换";
+            ? `确认炸后能接着出完整组合时，才使用这组 ${size} 张炸弹`
+            : `炸后只剩散牌，暂时保留这组 ${size} 张炸弹等待关键牌权`;
   return makeQuestion("炸弹管理", difficulty, variant, {
     caseName: `${tableCaseNames[(variant + 3) % 10]} · ${size} 张炸弹`,
     task:
@@ -940,23 +1009,27 @@ function bombQuestion(
     level,
     cards: normalCards(
       `${difficulty}-bomb-${variant}`,
-      level === "9" ? "8" : "9",
+      bombRank,
       size
     ),
     correct,
     distractors:
       difficulty === "foundation"
-        ? ["普通三张", "三带二", "同花顺"]
+        ? [
+            `把 ${size} 张 ${bombRank} 当成普通三张`,
+            `把同点牌误认成三带二`,
+            `只因花色不同就把它认成同花顺`,
+          ]
         : [
-            "现在使用炸弹，但不安排炸后的下一手",
-            "拆开炸弹来处理一张小牌",
-            "把阻断机会留到对手已经出完之后",
+            `现在使用 ${size} 张炸弹，但不安排炸后的下一手`,
+            `拆开这组 ${size} 张炸弹，只为处理一张小牌`,
+            `下家还剩 ${opponent} 张，却把阻断留到对手已经出完之后`,
           ],
     explanation: urgent
-      ? "对手进入一手出完范围时，炸弹的阻断价值上升，但仍要控制使用层级"
+      ? `下家只剩 ${opponent} 张时，这组 ${size} 张炸弹的阻断价值上升，但仍应先用较低层级`
       : partnerCover
-        ? "搭档能处理当前威胁时，保留炸弹可以覆盖更关键的收尾回合"
-        : "没有紧急威胁且炸后没有后续时，使用炸弹只赢一手，不能改善整手牌",
+        ? `搭档能处理当前威胁，保留这组 ${size} 张炸弹可以覆盖更关键的收尾回合`
+        : `下家还有 ${opponent} 张且炸后没有后续，现在使用 ${size} 张炸弹只赢一手，不能改善整手牌`,
     reasoning: [
       `先看威胁，下家剩 ${opponent} 张`,
       partnerCover ? "再看搭档，当前威胁还有第二种处理方式" : "再看搭档，当前没有明确替代控制",
@@ -999,10 +1072,10 @@ function endgameQuestion(
     difficulty === "foundation"
       ? `先按 ${remaining} 张判断最危险的${endgameShape}`
       : canBlock
-        ? "保留对应同型控制牌，优先阻止对手一手出完"
+        ? `下家可能用${endgameShape}一次走完，保留对应同型控制牌优先拦截`
         : partnerLead
-          ? "让搭档继续持权，并准备接风后的拦截"
-          : "改变出牌顺序，争取让对手无法按预计牌型出完";
+          ? `你没有直接压制${endgameShape}，让搭档继续持权并准备接风后的拦截`
+          : `无法直接压住${endgameShape}，改变出牌顺序迫使对手拆开这 ${remaining} 张`;
   return makeQuestion("残局处理", difficulty, variant, {
     caseName: `${endgameShape}收尾 · 剩 ${remaining} 张 · 局面 ${variant + 1}`,
     task:
@@ -1032,15 +1105,15 @@ function endgameQuestion(
             "先计算自己的牌点，不判断对手牌型",
           ]
         : [
-            "继续按中盘顺序出牌，不调整拦截牌",
-            "先拆掉对应同型控制牌处理散牌",
-            "只保存最高单张，不管对手预计牌型",
+            `下家只剩 ${remaining} 张，仍按中盘顺序出牌而不调整拦截`,
+            `先拆掉能处理${endgameShape}的同型控制牌去处理散牌`,
+            `只保存最高单张，不管对手最可能的${endgameShape}`,
           ],
     explanation: canBlock
-      ? "对手只剩一手时，对应同型拦截牌的价值高于中盘中的一般减手"
+      ? `下家只剩可能一次打完的${endgameShape}，对应同型拦截牌比中盘少走一手更重要`
       : partnerLead
-        ? "没有直接压制时，应利用搭档牌权改变下一轮的出牌类型"
-        : "无法直接压制时，要通过出牌顺序迫使对手拆开原有组合",
+        ? `你不能直接压住${endgameShape}，应利用搭档牌权改变下一轮的出牌类型`
+        : `你不能直接压住这 ${remaining} 张，只能通过出牌顺序迫使对手拆开${endgameShape}`,
     reasoning: [
       `先把 ${remaining} 张映射到${endgameShape}`,
       canBlock ? "再确认你有对应同型控制牌" : "再确认你没有直接同型压制",
@@ -1288,9 +1361,9 @@ function planningQuestion(
     level,
     correct: item.best,
     distractors: [
-      "只比较第一手能出几张，不计算剩余组合",
-      "选择牌点更大但总手数更多的路线",
-      "先拆开完整组合，再观察是否能重新组成",
+      `只看路线 A 的第一手，不继续计算「${item.routeA}」之后剩什么`,
+      `因为牌点更大就选路线 B，即使「${item.routeB}」需要更多手`,
+      `先拆开${item.name}中的完整组合，再碰运气看能否重新组成`,
     ],
     explanation: `${item.best}，因为规划目标是减少整手牌的总手数并保留关键牌权`,
     reasoning: [
@@ -1326,21 +1399,57 @@ function riskQuestion(
   const shouldAttack =
     item.success >= 65 &&
     (item.rescue || item.benefit.includes("阻止") || !item.loss.includes("直接"));
+  const foundationTasks = [
+    "有收益也有损失时，第一步怎样比较",
+    "失败会让对手直接出完时，最先确认什么",
+    "成功机会不高且收益很小时，怎样判断是否值得",
+    "接近五五开但失败后很危险时，应该关注什么",
+    "稳定路线会多走一手时，为什么仍可能更好",
+    "一次能出很多牌但会耗尽高牌时，怎样比较",
+    "搭档能补救一次时，这次机会应该怎样使用",
+    "对手即将出完时，什么时候可以承担结构损失",
+    "两条路线收益相同时，应该用什么继续比较",
+    "看不清对手分布时，怎样避免无依据冒险",
+  ];
+  const foundationAnswers = [
+    `把成功时的「${item.benefit}」和失败时的「${item.loss}」放在一起比较`,
+    `先确认失败会导致「${item.loss}」，并检查是否存在第二道防线`,
+    `成功率只有 ${item.success}%，收益只是${item.benefit}，不值得用${item.loss}交换`,
+    `不要只看 ${item.success}% 的成功率，先看失败后「${item.loss}」能否承受`,
+    `稳定路线虽然会${item.loss}，但能${item.benefit}，后面仍有接管机会`,
+    `一次处理六张不等于更好，先确认用完高牌后还能否重新拿到牌权`,
+    `搭档的补救只算一次保险，当前路线仍要保留自己的退路`,
+    `下家即将出完时，阻断收益足够大，可以为此承担一次拆弹代价`,
+    `两条路线都能减少一手时，选择出完后仍有明确下一手的路线`,
+    `信息不足且失败后没有拦截时，先选可回退的稳妥路线`,
+  ];
+  const foundationExplanations = [
+    "风险不是单看成功率，而是把成功收益和失败后果放在同一个决定里",
+    "会直接输掉收尾的失败后果必须优先检查，不能被表面的高成功率盖住",
+    "小收益无法补偿明显的结构损失，尤其是在成功机会本来就不高时",
+    "接近五五开的选择更要比较失败后果，因为概率本身不能替你承担损失",
+    "稳定路线的价值在于保留下一次控制，而不是只追求少走一手",
+    "一次多出几张只是眼前收益，耗尽高牌会让后续每一手都被动",
+    "搭档能补救会降低风险，但这份补救不能被当成无限次数使用",
+    "对手即将走完时，阻断的紧迫性可以高于保护一般牌组",
+    "收益相同就继续比较失败后果、下一手和谁还握有牌权",
+    "信息不足时应选择失败后仍能补救的路线，而不是猜一个最好结果",
+  ];
   const correct =
     difficulty === "foundation"
-      ? "同时比较成功收益和失败后果"
+      ? foundationAnswers[index]
       : shouldAttack
         ? item.rescue
-          ? "选择进攻路线，但保留一张控制牌作为补救"
-          : "为阻止立即出完而承担可说明的风险"
+          ? `选择能${item.benefit}的进攻路线，同时保留控制牌防止${item.loss}`
+          : `为了${item.benefit}而承担一次风险，因为更需要避免${item.loss}`
         : item.rescue
-          ? "选择较稳路线，把搭档补救留给更关键回合"
-          : "降低风险，避免失败后直接失去整局";
+          ? `选择较稳路线，避免${item.loss}，把搭档补救留给更关键回合`
+          : `降低风险，不用${item.loss}去交换${item.benefit}`;
   return makeQuestion("风险判断", difficulty, variant, {
     caseName: `${item.name} · 决策 ${variant + 1}`,
     task:
       difficulty === "foundation"
-        ? "做选择前，哪些信息必须一起比较"
+        ? foundationTasks[index]
         : "在收益、失败后果和补救能力之间，哪种决策更稳健",
     facts: [
       `当前打 ${level}`,
@@ -1359,13 +1468,18 @@ function riskQuestion(
     level,
     correct,
     distractors: [
-      "只因为成功率超过一半就选择进攻",
-      "只比较成功时能少走几手",
-      "把搭档补救当作每次都能成功",
+      `只因为成功率是 ${item.success}% 就进攻，不看失败后会${item.loss}`,
+      `只看成功时能${item.benefit}，不计算失败后果`,
+      item.rescue
+        ? `把搭档的一次补救当成每次都能成功，不保留自己的退路`
+        : `搭档没有明确补救，仍假定失败后一定有人接管`,
     ],
-    explanation: item.rescue
-      ? "存在补救时可以承担有限风险，但仍需保留至少一道控制"
-      : "没有补救时，失败后果必须显著提高进攻门槛",
+    explanation:
+      difficulty === "foundation"
+        ? foundationExplanations[index]
+        : item.rescue
+          ? `搭档能补救一次，可以尝试${item.benefit}，但仍要保留至少一道控制避免${item.loss}`
+          : `没有补救时，「${item.loss}」必须显著提高选择「${item.benefit}」的门槛`,
     reasoning: [
       `先看收益：${item.benefit}`,
       `再看最坏结果：${item.loss}`,
