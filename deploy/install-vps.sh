@@ -14,6 +14,11 @@ BACKUP_ROOT='/srv/aialra/backups/guandan'
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_DIR="$BACKUP_ROOT/$STAMP"
 
+# macOS archive tools may emit AppleDouble resource-fork files such as
+# .___vite_rsc_assets_manifest.js. Wrangler treats them as JavaScript modules,
+# so remove this non-application metadata before validating the release.
+find "$RELEASE_DIR" -type f -name '._*' -delete
+
 for required in \
   "$RELEASE_DIR/dist/server/index.js" \
   "$RELEASE_DIR/dist/server/wrangler.json" \
