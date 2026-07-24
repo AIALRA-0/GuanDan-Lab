@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal } from "../lib/guandan/cards";
 import { createGame, pass, play } from "../lib/guandan/game";
+import { buildHandFanLayout } from "../lib/guandan/hand-layout";
 import {
   canBeat,
   enumeratePatterns,
   isBomb,
   legalPatterns,
 } from "../lib/guandan/patterns";
-import { chooseAiMove } from "../lib/guandan/strategy";
+import {
+  chooseAiMove,
+  explainMove,
+  scoreLegalMoves,
+} from "../lib/guandan/strategy";
+import {
+  questionForSession,
+  normalizeTrainingText,
+  trainingBank,
+  trainingBankStats,
+  trainingDifficultyMeta,
+  trainingQuestionFingerprint,
+  trainingScenarioFingerprint,
+  trainingTopics,
+} from "../lib/guandan/training";
 import { Card, CardRank, GameState, Pattern, Rank, Suit } from "../lib/guandan/types";
 
 let id = 0;
@@ -52,6 +67,49 @@ describe("双副牌与发牌", () => {
     expect(first.map((hand) => hand.length)).toEqual([27, 27, 27, 27]);
     expect(first).toEqual(second);
     expect(new Set(first.flat().map((candidate) => candidate.id)).size).toBe(108);
+  });
+});
+
+describe("单排手牌布局", () => {
+  const hand = createGame(20260724).hands[0];
+
+  it("手机宽度下 27 张牌保持单排并完整落在容器内", () => {
+    const layout = buildHandFanLayout(hand, 350);
+    expect(layout.placements).toHaveLength(27);
+    expect(layout.height).toBeLessThan(110);
+    expect(layout.placements[0].left).toBeGreaterThanOrEqual(0);
+    expect(
+      layout.placements.at(-1)!.left + layout.cardWidth
+    ).toBeLessThanOrEqual(350.01);
+    expect(
+      layout.placements.every(
+        (placement, index) =>
+          index === 0 ||
+          placement.left > layout.placements[index - 1].left
+      )
+    ).toBe(true);
+  });
+
+  it("不同点数之间的间距大于同点牌间距", () => {
+    const layout = buildHandFanLayout(hand, 700);
+    const sameRankSteps: number[] = [];
+    const groupSteps: number[] = [];
+
+    for (let index = 1; index < hand.length; index += 1) {
+      const step =
+        layout.placements[index].left - layout.placements[index - 1].left;
+      if (hand[index].rank === hand[index - 1].rank) {
+        sameRankSteps.push(step);
+      } else {
+        groupSteps.push(step);
+      }
+    }
+
+    expect(sameRankSteps.length).toBeGreaterThan(0);
+    expect(groupSteps.length).toBeGreaterThan(0);
+    expect(Math.min(...groupSteps)).toBeGreaterThan(
+      Math.max(...sameRankSteps)
+    );
   });
 });
 
@@ -217,6 +275,19 @@ describe("轮次、接风与名次", () => {
 });
 
 describe("AI 合法性与性能", () => {
+  it("实时教练给出依据、风险、下一步和可试选路线", () => {
+    const state = createGame(20260724, "7");
+    const candidates = scoreLegalMoves(state, 0, "master");
+    expect(candidates.length).toBeGreaterThan(2);
+    const explanation = explainMove(state, 0, candidates[0].pattern);
+    expect(explanation.evidence.length).toBeGreaterThanOrEqual(4);
+    expect(explanation.risks.length).toBeGreaterThanOrEqual(1);
+    expect(explanation.nextSteps).toHaveLength(3);
+    expect(explanation.reason).not.toMatch(/综合评分|分代价|路线少.*分/);
+    expect(explanation.reason.length).toBeGreaterThan(20);
+    expect(explanation.partnerRead).toContain("搭档");
+  });
+
   it("AI 在完整模拟中始终选择合法动作", () => {
     for (const seed of [11, 97, 2026]) {
       let state = createGame(seed, "7");
@@ -253,5 +324,221 @@ describe("AI 合法性与性能", () => {
     const elapsed = performance.now() - started;
     expect(total).toBeGreaterThan(100);
     expect(elapsed).toBeLessThan(2500);
+  });
+});
+
+describe("分层训练题库", () => {
+  it("保留两个数量级扩充，但不再用数字换皮虚增题量", () => {
+    expect(trainingBank.length).toBe(400);
+    expect(trainingBankStats.total).toBe(trainingBank.length);
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      expect(
+        trainingBankStats.byDifficulty[
+          difficulty as keyof typeof trainingBankStats.byDifficulty
+        ]
+      ).toBe(100);
+    }
+    for (const topic of trainingTopics) {
+      expect(trainingBankStats.byTopic[topic]).toBe(40);
+    }
+  });
+
+  it("题目编号与场景真正唯一，标题统一为清晰主题格式", () => {
+    expect(new Set(trainingBank.map((question) => question.id)).size).toBe(
+      trainingBank.length
+    );
+    expect(
+      new Set(trainingBank.map(trainingQuestionFingerprint)).size
+    ).toBeGreaterThanOrEqual(340);
+    expect(
+      new Set(trainingBank.map(trainingScenarioFingerprint)).size
+    ).toBe(trainingBank.length);
+    expect(trainingBankStats.uniqueScenarioRate).toBe(1);
+
+    const weakDistractor =
+      /随机|无条件|永远|完全忽略|证明牌大|放弃记牌|拆掉所有|立即炸掉任何/;
+    const unexplainedJargon = /信息集|反事实|牌效|终局阈值/;
+    for (const question of trainingBank) {
+      expect(question.options).toHaveLength(4);
+      expect(new Set(question.options).size, question.id).toBe(4);
+      expect(question.answer).toBeGreaterThanOrEqual(0);
+      expect(question.answer).toBeLessThan(4);
+      expect(question.options[question.answer]).toBeTruthy();
+      expect(question.hint.length).toBeGreaterThan(6);
+      expect(question.explanation.length).toBeGreaterThan(8);
+      expect(question.facts.length, question.id).toBeGreaterThanOrEqual(3);
+      expect(question.reasoning, question.id).toHaveLength(3);
+      expect(question.title, question.id).toMatch(/^[^：]+：[^：]+$/);
+      expect(question.title, question.id).not.toMatch(
+        /·|牌例\s*\d+|局面\s*\d+|协同\s*\d+|记录\s*\d+|路线\s*\d+|决策\s*\d+/
+      );
+      expect(question.prompt, question.id).not.toMatch(/情境「|任务：/);
+      expect(
+        question.options.some((option) => weakDistractor.test(option)),
+        question.id
+      ).toBe(false);
+      expect(
+        unexplainedJargon.test(
+          `${question.prompt}${question.context}${question.explanation}`
+        ),
+        question.id
+      ).toBe(false);
+    }
+
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      const questions = trainingBank.filter(
+        (question) => question.difficulty === difficulty
+      );
+      expect(new Set(questions.map((question) => question.title)).size).toBe(
+        questions.length
+      );
+    }
+  });
+
+  it("每个主题难度格都有不同答案、干扰项和解释路径", () => {
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      for (const topic of trainingTopics) {
+        const questions = trainingBank.filter(
+          (question) =>
+            question.difficulty === difficulty && question.topic === topic
+        );
+        const correctAnswers = new Set(
+          questions.map((question) => question.options[question.answer])
+        );
+        const allOptions = new Set(
+          questions.flatMap((question) => question.options)
+        );
+        const explanations = new Set(
+          questions.map((question) => question.explanation)
+        );
+        expect(correctAnswers.size, `${difficulty}/${topic} 正确答案`).toBeGreaterThanOrEqual(
+          7
+        );
+        expect(allOptions.size, `${difficulty}/${topic} 全部选项`).toBeGreaterThanOrEqual(
+          11
+        );
+        expect(explanations.size, `${difficulty}/${topic} 解释`).toBeGreaterThanOrEqual(
+          8
+        );
+      }
+    }
+  });
+
+  it("筑基题不再用同一问题和同一答案只替换数字", () => {
+    const conceptFingerprint = (text: string) =>
+      normalizeTrainingText(text)
+        .replace(
+          /(?:单张|对子|三张|三带二|顺子|三连对|钢板|同花顺|四王炸|炸弹|大小王|牌点)/g,
+          "牌型"
+        )
+        .replace(/(?:上家|下家|搭档|对手|玩家)/g, "角色");
+
+    for (const topic of trainingTopics) {
+      const questions = trainingBank.filter(
+        (question) =>
+          question.difficulty === "foundation" && question.topic === topic
+      );
+      expect(
+        new Set(questions.map((question) => conceptFingerprint(question.prompt)))
+          .size,
+        `${topic} 问法`
+      ).toBe(10);
+
+      if (topic !== "牌型识别") {
+        expect(
+          new Set(
+            questions.map((question) =>
+              conceptFingerprint(question.options[question.answer])
+            )
+          ).size,
+          `${topic} 答案原理`
+        ).toBeGreaterThanOrEqual(8);
+      }
+    }
+  });
+
+  it("所有题目中的数字和牌点与中文说明保持清晰间距", () => {
+    for (const question of trainingBank) {
+      const visibleText = [
+        question.title,
+        question.prompt,
+        question.context,
+        question.explanation,
+        question.principle,
+        question.hint,
+        ...question.facts,
+        ...question.options,
+        ...question.reasoning,
+      ].join("\n");
+      expect(visibleText).not.toMatch(
+        /(?:[A-Za-z0-9%](?=\p{Script=Han})|\p{Script=Han}(?=[A-Za-z0-9]))/u
+      );
+      expect(visibleText).not.toMatch(
+        /(?:应识别为|得到|本题补) \p{Script=Han}/u
+      );
+    }
+  });
+
+  it("所有带牌型标注的题目都能由正式规则引擎验证", () => {
+    const patternQuestions = trainingBank.filter(
+      (question) => question.expectedPatternType
+    );
+    expect(patternQuestions.length).toBeGreaterThanOrEqual(80);
+    for (const question of patternQuestions) {
+      const selected = new Set(question.cards.map((candidate) => candidate.id));
+      const valid = enumeratePatterns(question.cards, question.level).some(
+        (pattern) =>
+          pattern.type === question.expectedPatternType &&
+          pattern.cards.length === question.cards.length &&
+          pattern.cards.every((candidate) => selected.has(candidate.id))
+      );
+      expect(valid, question.id).toBe(true);
+    }
+  });
+
+  it("每个难度都开放十个主题且每格数量一致", () => {
+    for (const difficulty of Object.keys(trainingDifficultyMeta)) {
+      const typedDifficulty =
+        difficulty as keyof typeof trainingBankStats.byDifficultyAndTopic;
+      for (const topic of trainingTopics) {
+        expect(
+          trainingBankStats.byDifficultyAndTopic[typedDifficulty][topic]
+        ).toBe(10);
+      }
+      const total = Object.values(
+        trainingBankStats.byDifficultyAndTopic[typedDifficulty]
+      ).reduce((sum, count) => sum + count, 0);
+      expect(total).toBe(trainingBankStats.byDifficulty[typedDifficulty]);
+    }
+  });
+
+  it("一次训练会遍历完整题池后才重复", () => {
+    const pool = trainingBank.filter(
+      (question) => question.difficulty === "foundation"
+    );
+    for (const seed of [0, 1, 41, 2026]) {
+      const ids = Array.from({ length: pool.length }, (_, index) =>
+        questionForSession(pool, index, seed).id
+      );
+      expect(new Set(ids).size).toBe(pool.length);
+      expect(questionForSession(pool, pool.length, seed).id).toBe(ids[0]);
+    }
+  });
+
+  it("智能训练前十题轮换全部十个主题", () => {
+    const pool = trainingBank.filter(
+      (question) => question.difficulty === "foundation"
+    );
+    for (const seed of [0, 1, 41, 2026]) {
+      const firstTenTopics = Array.from(
+        { length: 10 },
+        (_, index) => questionForSession(pool, index, seed).topic
+      );
+      expect(new Set(firstTenTopics).size).toBe(trainingTopics.length);
+    }
+  });
+
+  it("空题池不再悄悄回退到固定首题", () => {
+    expect(() => questionForSession([], 0, 1)).toThrow("训练题池不能为空");
   });
 });

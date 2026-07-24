@@ -4,7 +4,7 @@ import "./globals.css";
 
 const title = "贯策 · 科学掼蛋训练系统";
 const description =
-  "高性能掼蛋对局、逐手解释、搭档推理、反事实比较与专项训练平台";
+  "高性能掼蛋对局、逐手解释、搭档推理、其他选择比较与专项训练平台";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -23,6 +23,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title,
     description,
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+      shortcut: "/favicon.svg",
+    },
     openGraph: {
       title,
       description,
@@ -31,8 +35,8 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [
         {
           url: image,
-          width: 1731,
-          height: 909,
+          width: 1727,
+          height: 911,
           alt: "贯策科学掼蛋训练系统",
         },
       ],

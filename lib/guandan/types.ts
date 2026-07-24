@@ -72,6 +72,9 @@ export interface DecisionExplanation {
   reason: string;
   consequence: string;
   partnerRead: string;
+  evidence: string[];
+  risks: string[];
+  nextSteps: string[];
   confidence: number;
   quality: "精确" | "稳健" | "可行" | "冒险" | "失误";
   factors: DecisionFactor[];
@@ -112,5 +115,14 @@ export interface ProgressSummary {
   trainingCompleted: number;
   rating: number;
   streak: number;
+  questionsAnswered: number;
+  questionsCorrect: number;
+  reviewDue: number;
+  reviewQuestionIds: string[];
+  skills: Array<{
+    skill: string;
+    attempted: number;
+    correct: number;
+    due: number;
+  }>;
 }
-

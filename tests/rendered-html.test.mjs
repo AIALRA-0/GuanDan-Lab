@@ -29,9 +29,34 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(javascript, /每一手都讲清楚为什么/);
   assert.match(javascript, /专项训练/);
   assert.match(javascript, /规则实验室/);
+  assert.match(javascript, /交互教练/);
+  assert.match(javascript, /训练透视/);
+  assert.match(javascript, /对局历史/);
+  assert.match(javascript, /出牌节奏/);
+  assert.match(javascript, /暂停连播/);
+  assert.match(javascript, /播放/);
+  assert.match(javascript, /下一手/);
+  assert.match(javascript, /为什么这样结算/);
+  assert.match(javascript, /已知信息/);
+  assert.match(javascript, /复盘本局/);
+  assert.match(javascript, /单排牌扇/);
   assert.match(css, /\.game-table/);
+  assert.match(css, /\.vision-drawer/);
+  assert.match(css, /\.history-list/);
+  assert.match(css, /\.action-announcer/);
+  assert.match(css, /\.next-turn-cue/);
+  assert.match(css, /next-turn-progress/);
+  assert.match(css, /\.quiz-reasoning/);
+  assert.match(css, /\.toolbar-setting/);
+  assert.match(css, /\.teaching-takeaways/);
+  assert.match(css, /\.card-face\.is-selected:{1,2}after/);
+  assert.match(css, /\.hand-card-slot/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(server, /vinext/);
+  assert.doesNotMatch(
+    javascript,
+    /判断信心|综合评分|分代价|与首选相差\s*\d+(?:\.\d+)?\s*分/
+  );
   assert.doesNotMatch(
     `${javascript}\n${css}`,
     /Your site is taking shape|react-loading-skeleton/
