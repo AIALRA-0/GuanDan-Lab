@@ -118,13 +118,13 @@ ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 systemctl daemon-reload
 systemctl enable --now aialra-guandan.service
 
-for attempt in {1..45}; do
+for attempt in {1..120}; do
   if curl -fsS --max-time 4 \
     -H 'Host: guandan.aialra.online' \
     http://127.0.0.1:13100/ >/dev/null; then
     break
   fi
-  if [[ "$attempt" -eq 45 ]]; then
+  if [[ "$attempt" -eq 120 ]]; then
     systemctl status --no-pager aialra-guandan.service >&2 || true
     journalctl -u aialra-guandan.service -n 100 --no-pager >&2 || true
     exit 1
@@ -132,7 +132,7 @@ for attempt in {1..45}; do
   sleep 1
 done
 
-api_result="$(curl -fsS --max-time 5 \
+api_result="$(curl -fsS --max-time 30 \
   -H 'Host: guandan.aialra.online' \
   -H 'Origin: https://guandan.aialra.online' \
   -H 'X-Aialra-Authenticated: 1' \
