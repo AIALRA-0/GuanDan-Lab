@@ -244,7 +244,7 @@ export function explainMove(
       ? [`下一位对手只剩 ${state.hands[nextSeat].length} 张，必须防止其一手或两手走完`]
       : []),
     ...(pattern && isBomb(pattern) && remaining > 0
-      ? ["炸弹一旦使用就失去后续强制夺权能力，需要确认炸后出口"]
+      ? ["炸弹一旦使用就失去后续强制夺权能力，需要确认炸后下一手怎么走"]
       : []),
   ];
   const nextSteps = [

@@ -13,10 +13,13 @@ import {
   scoreLegalMoves,
 } from "../lib/guandan/strategy";
 import {
+  normalizeTrainingText,
   questionForSession,
   trainingBank,
   trainingBankStats,
   trainingDifficultyMeta,
+  trainingQuestionFingerprint,
+  trainingScenarioFingerprint,
   trainingTopics,
 } from "../lib/guandan/training";
 import { Card, CardRank, GameState, Pattern, Rank, Suit } from "../lib/guandan/types";
@@ -280,25 +283,49 @@ describe("AI 合法性与性能", () => {
 });
 
 describe("分层训练题库", () => {
-  it("题库达到三个原始题目的两个至三个数量级扩充", () => {
-    expect(trainingBank.length).toBeGreaterThanOrEqual(1500);
+  it("保留两个数量级扩充，但不再用数字换皮虚增题量", () => {
+    expect(trainingBank.length).toBe(400);
     expect(trainingBankStats.total).toBe(trainingBank.length);
     for (const difficulty of Object.keys(trainingDifficultyMeta)) {
       expect(
         trainingBankStats.byDifficulty[
           difficulty as keyof typeof trainingBankStats.byDifficulty
         ]
-      ).toBeGreaterThanOrEqual(300);
+      ).toBe(100);
     }
     for (const topic of trainingTopics) {
-      expect(trainingBankStats.byTopic[topic]).toBeGreaterThanOrEqual(100);
+      expect(trainingBankStats.byTopic[topic]).toBe(40);
     }
   });
 
-  it("题目编号与选项稳定且没有重复答案", () => {
+  it("题目编号、标题、题干、场景指纹与选项都真正唯一", () => {
     expect(new Set(trainingBank.map((question) => question.id)).size).toBe(
       trainingBank.length
     );
+    expect(new Set(trainingBank.map((question) => question.title)).size).toBe(
+      trainingBank.length
+    );
+    expect(new Set(trainingBank.map((question) => question.prompt)).size).toBe(
+      trainingBank.length
+    );
+    expect(
+      new Set(trainingBank.map(trainingQuestionFingerprint)).size
+    ).toBe(trainingBank.length);
+    expect(
+      new Set(trainingBank.map(trainingScenarioFingerprint)).size
+    ).toBe(trainingBank.length);
+    expect(
+      new Set(
+        trainingBank.map((question) =>
+          normalizeTrainingText(`${question.title}|${question.prompt}`)
+        )
+      ).size
+    ).toBe(trainingBank.length);
+    expect(trainingBankStats.uniqueScenarioRate).toBe(1);
+
+    const weakDistractor =
+      /随机|无条件|永远|完全忽略|证明牌大|放弃记牌|拆掉所有|立即炸掉任何/;
+    const unexplainedJargon = /信息集|反事实|牌效|终局阈值/;
     for (const question of trainingBank) {
       expect(question.options).toHaveLength(4);
       expect(new Set(question.options).size, question.id).toBe(4);
@@ -307,6 +334,18 @@ describe("分层训练题库", () => {
       expect(question.options[question.answer]).toBeTruthy();
       expect(question.hint.length).toBeGreaterThan(6);
       expect(question.explanation.length).toBeGreaterThan(8);
+      expect(question.facts.length, question.id).toBeGreaterThanOrEqual(3);
+      expect(question.reasoning, question.id).toHaveLength(3);
+      expect(
+        question.options.some((option) => weakDistractor.test(option)),
+        question.id
+      ).toBe(false);
+      expect(
+        unexplainedJargon.test(
+          `${question.prompt}${question.context}${question.explanation}`
+        ),
+        question.id
+      ).toBe(false);
     }
   });
 
@@ -314,7 +353,7 @@ describe("分层训练题库", () => {
     const patternQuestions = trainingBank.filter(
       (question) => question.expectedPatternType
     );
-    expect(patternQuestions.length).toBeGreaterThanOrEqual(300);
+    expect(patternQuestions.length).toBeGreaterThanOrEqual(80);
     for (const question of patternQuestions) {
       const selected = new Set(question.cards.map((candidate) => candidate.id));
       const valid = enumeratePatterns(question.cards, question.level).some(
@@ -327,10 +366,15 @@ describe("分层训练题库", () => {
     }
   });
 
-  it("每个难度只开放真实有题的主题", () => {
+  it("每个难度都开放十个主题且每格数量一致", () => {
     for (const difficulty of Object.keys(trainingDifficultyMeta)) {
       const typedDifficulty =
         difficulty as keyof typeof trainingBankStats.byDifficultyAndTopic;
+      for (const topic of trainingTopics) {
+        expect(
+          trainingBankStats.byDifficultyAndTopic[typedDifficulty][topic]
+        ).toBe(10);
+      }
       const total = Object.values(
         trainingBankStats.byDifficultyAndTopic[typedDifficulty]
       ).reduce((sum, count) => sum + count, 0);

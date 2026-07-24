@@ -73,6 +73,7 @@ type View = "table" | "training" | "insights" | "rules";
 type CoachQuestion = "evidence" | "risk" | "partner" | "compare";
 type CoachPanelView = "coach" | "history";
 type HistoryFilter = "all" | "team" | "opponents";
+type PlaybackPace = "slow" | "standard" | "fast";
 type HistoryRow = {
   record: GameState["records"][number];
   remainingAfter: number;
@@ -109,20 +110,29 @@ const emptyProgress: ProgressSummary = {
 
 const difficultyMeta: Record<
   Difficulty,
-  { name: string; description: string; speed: number }
+  { name: string; description: string }
 > = {
-  beginner: { name: "入门陪练", description: "保留随机性，适合熟悉牌型", speed: 760 },
-  advanced: { name: "进阶牌手", description: "关注牌效、牌权和基本配合", speed: 580 },
-  master: { name: "大师推演", description: "优先团队收益和残局控制", speed: 420 },
+  beginner: { name: "入门陪练", description: "保留随机性，适合熟悉牌型" },
+  advanced: { name: "进阶牌手", description: "关注组牌效率、牌权和基本配合" },
+  master: { name: "大师推演", description: "优先团队收益和残局控制" },
+};
+
+const playbackPaceMeta: Record<
+  PlaybackPace,
+  { name: string; delay: number }
+> = {
+  slow: { name: "慢速讲解", delay: 2200 },
+  standard: { name: "标准节奏", delay: 1550 },
+  fast: { name: "快速演练", delay: 950 },
 };
 
 const topicDescriptions: Record<TrainingTopic, string> = {
   牌型识别: "先把合法性判断练成直觉",
-  逢人配: "衡量万能牌的结构机会成本",
-  牌权控制: "夺权前先写清下一手出口",
+  逢人配: "比较万能牌放在哪里最省手数",
+  牌权控制: "夺权前先写清下一手要出什么",
   搭档协同: "从出牌和张数读取伙伴意图",
   记牌推理: "只追踪会改变决策的关键信息",
-  炸弹管理: "把炸弹当作终局控制资源",
+  炸弹管理: "把炸弹留给真正会改变胜负的回合",
   残局处理: "识别一手走完与接风窗口",
   进贡还贡: "用最低结构损失完成交换",
   组牌规划: "比较整手牌的出完路径",
@@ -151,6 +161,8 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [state, setState] = useState<GameState>(() => createGame(initialSeed));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
+  const [playbackPace, setPlaybackPace] =
+    useState<PlaybackPace>("standard");
   const [coachEnabled, setCoachEnabled] = useState(true);
   const [coach, setCoach] = useState<DecisionExplanation | null>(null);
   const [coachQuestion, setCoachQuestion] =
@@ -177,6 +189,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
   const [sessionAttempted, setSessionAttempted] = useState(0);
   const [sessionCorrect, setSessionCorrect] = useState(0);
   const [sessionStreak, setSessionStreak] = useState(0);
+  const [resultDismissed, setResultDismissed] = useState(false);
   const recordedSeed = useRef<number | null>(null);
   const aiTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -185,6 +198,22 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
     [selectedIds, state]
   );
   const latestRecord = state.records.at(-1);
+  const latestActionText = latestRecord
+    ? latestRecord.action === "play"
+      ? `${seatNames[latestRecord.seat]}打出${latestRecord.pattern?.label ?? "一手牌"}`
+      : `${seatNames[latestRecord.seat]}选择过牌`
+    : "等待本局第一手";
+  const finalPlayRecord = [...state.records]
+    .reverse()
+    .find((record) => record.action === "play");
+  const resultReason =
+    state.levelGain === 3
+      ? "获胜队包揽前两名，形成双下，因此升三级"
+      : state.levelGain === 2
+        ? "头游的搭档第三个出完，形成头三，因此升两级"
+        : state.levelGain === 1
+          ? "头游的搭档最后出完，形成头末，因此升一级"
+          : "本局仍在进行";
   const reviewedRecord =
     reviewRecordId === null
       ? undefined
@@ -366,11 +395,17 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
               : current;
         }
       });
-    }, difficultyMeta[difficulty].speed);
+    }, playbackPaceMeta[playbackPace].delay);
     return () => {
       if (aiTimer.current) clearTimeout(aiTimer.current);
     };
-  }, [difficulty, state.currentSeat, state.turn, state.winnerTeam]);
+  }, [
+    difficulty,
+    playbackPace,
+    state.currentSeat,
+    state.turn,
+    state.winnerTeam,
+  ]);
 
   const startNewGame = () => {
     setState(createGame());
@@ -379,6 +414,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
     setReviewRecordId(null);
     setCoachQuestion("evidence");
     setCoachPanelView("coach");
+    setResultDismissed(false);
     setNotice("新的一局已经发牌，本局从打 2 开始");
   };
 
@@ -572,7 +608,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
               <p className="eyebrow">科学掼蛋训练系统</p>
               <h1>每一手都讲清楚为什么</h1>
               <p>
-                对局、解释、反事实比较和专项训练在同一张牌桌完成
+                对局、解释、其他选择比较和专项训练在同一张牌桌完成
               </p>
             </div>
             <div className="hero-metrics">
@@ -601,6 +637,24 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                   ))}
                 </div>
                 <div className="table-tools">
+                  <label className="pace-control">
+                    <span>出牌节奏</span>
+                    <select
+                      value={playbackPace}
+                      onChange={(event) =>
+                        setPlaybackPace(event.target.value as PlaybackPace)
+                      }
+                      aria-label="出牌节奏"
+                    >
+                      {(Object.keys(playbackPaceMeta) as PlaybackPace[]).map(
+                        (pace) => (
+                          <option value={pace} key={pace}>
+                            {playbackPaceMeta[pace].name}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </label>
                   <button
                     className={`icon-action vision-action${
                       trainingVision ? " active" : ""
@@ -650,11 +704,29 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                 <div className="table-center">
                   <div className="round-status">
                     <span className="live-dot" />
-                    第 {state.turn + 1} 手
+                    {state.winnerTeam === undefined
+                      ? `下一位 · ${seatNames[state.currentSeat]}`
+                      : "本局已经结束"}
                     <span>·</span>
-                    {state.targetSeat === undefined
-                      ? `${seatNames[state.currentSeat]}先手`
-                      : `${seatNames[state.targetSeat]}持有牌权`}
+                    已记录 {state.records.length} 手
+                  </div>
+                  <div
+                    className={`action-announcer action-seat-${
+                      latestRecord?.seat ?? 0
+                    }`}
+                    key={latestRecord?.id ?? 0}
+                    aria-live="polite"
+                  >
+                    <strong>{latestActionText}</strong>
+                    <span>
+                      {latestRecord?.action === "play"
+                        ? `${latestRecord.pattern?.cards.length ?? 0} 张 · ${
+                            seatNames[latestRecord.seat]
+                          }还剩 ${state.hands[latestRecord.seat].length} 张`
+                        : latestRecord
+                          ? "本轮没有跟牌，牌权继续向下传递"
+                          : "你是本局先手，可以先查看推荐"}
+                    </span>
                   </div>
                   <div className="played-pattern">
                     {state.target ? (
@@ -670,7 +742,12 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                             />
                           ))}
                         </div>
-                        <strong>{state.target.label}</strong>
+                        <strong>
+                          {state.targetSeat === undefined
+                            ? ""
+                            : `${seatNames[state.targetSeat]} · `}
+                          {state.target.label}
+                        </strong>
                       </>
                     ) : (
                       <div className="empty-trick">
@@ -757,24 +834,62 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                   </div>
                 </div>
 
-                {state.winnerTeam !== undefined && (
+                {state.winnerTeam !== undefined && !resultDismissed && (
                   <div className="result-overlay">
                     <div className="result-card">
                       <Trophy size={32} />
-                      <p>本局完成</p>
+                      <p>本局已经完整结算</p>
                       <h2>{getGameResultLabel(state)}</h2>
-                      <span>
+                      <div className="result-reason">
+                        <strong>为什么这样结算</strong>
+                        <span>{resultReason}</span>
+                      </div>
+                      <div className="finish-order">
+                        <strong>出完顺序</strong>
+                        <ol>
+                          {state.finished.map((seat, index) => (
+                            <li key={`${seat}-${index}`}>
+                              <i>{index + 1}</i>
+                              <span>{seatNames[seat]}</span>
+                              <em>{seatTeam(seat) === 0 ? "你方" : "对方"}</em>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      {finalPlayRecord?.pattern && (
+                        <div className="decisive-turn">
+                          <strong>最后一手</strong>
+                          <span>
+                            {seatNames[finalPlayRecord.seat]}打出
+                            {finalPlayRecord.pattern.label}，剩余手牌清零
+                          </span>
+                        </div>
+                      )}
+                      <div className="result-summary">
                         你完成了 {humanRecords.length} 次决策，其中{" "}
                         {strongHumanDecisions} 次达到稳健以上
-                      </span>
-                      <button
-                        className="button primary"
-                        type="button"
-                        onClick={startNewGame}
-                      >
-                        再练一局
-                        <ArrowRight size={17} />
-                      </button>
+                      </div>
+                      <div className="result-actions">
+                        <button
+                          className="result-review"
+                          type="button"
+                          onClick={() => {
+                            setResultDismissed(true);
+                            setCoachPanelView("history");
+                          }}
+                        >
+                          <History size={16} />
+                          复盘本局
+                        </button>
+                        <button
+                          className="button primary"
+                          type="button"
+                          onClick={startNewGame}
+                        >
+                          再练一局
+                          <ArrowRight size={17} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -991,7 +1106,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
               icon={<BookMarked size={18} />}
               label="科学题库"
               value={trainingBankStats.total.toLocaleString("zh-CN")}
-              detail="规则引擎可验证"
+              detail="结构去重与规则双重校验"
             />
             <TrainingStat
               icon={<Target size={18} />}
@@ -1127,6 +1242,14 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                 </div>
               </div>
               <p className="quiz-context">{currentQuiz.context}</p>
+              <div className="quiz-facts" aria-label="本题已知信息">
+                <strong>已知信息</strong>
+                <ul>
+                  {currentQuiz.facts.map((fact) => (
+                    <li key={fact}>{fact}</li>
+                  ))}
+                </ul>
+              </div>
               <p className="quiz-prompt">{currentQuiz.prompt}</p>
               {currentQuiz.cards.length > 0 ? (
                 <div className="quiz-cards">
@@ -1146,7 +1269,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                   </span>
                   <div>
                     <strong>局面推演题</strong>
-                    <p>先比较牌权、双方张数与下一手出口，再做选择</p>
+                    <p>已知信息已经列出，只根据这些信息判断，不猜隐藏牌</p>
                   </div>
                   <Clock3 size={18} />
                   <small>建议 {currentQuiz.estimatedSeconds} 秒</small>
@@ -1199,6 +1322,14 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                         : "这一步值得重新理解"}
                     </strong>
                     <p>{currentQuiz.explanation}</p>
+                    <ol className="quiz-reasoning">
+                      {currentQuiz.reasoning.map((step, index) => (
+                        <li key={step}>
+                          <i>{index + 1}</i>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ol>
                     <small>可迁移原则 · {currentQuiz.principle}</small>
                   </div>
                   <button type="button" onClick={nextQuiz}>
@@ -1432,13 +1563,13 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
               </span>
               <h2>从规则引擎到大师模型</h2>
               <p>
-                当前版本使用合法着生成、团队启发式评分和反事实解释，模型接口预留给信息集蒙特卡洛与深度蒙特卡洛自对弈
+                当前版本会生成合法出牌、比较团队收益，并解释如果选择另一手牌会发生什么，后续还能继续加入更强的自对弈模型
               </p>
             </div>
             <div className="method-flow">
               <MethodStep number="1" label="生成合法着" />
               <MethodStep number="2" label="评估团队收益" />
-              <MethodStep number="3" label="比较反事实" />
+              <MethodStep number="3" label="比较其他选择" />
               <MethodStep number="4" label="转成训练题" />
             </div>
           </div>
