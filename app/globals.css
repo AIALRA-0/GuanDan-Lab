@@ -837,17 +837,28 @@ button:focus-visible {
 }
 
 .hand-cards {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 61px));
   min-height: 116px;
   align-items: end;
   justify-content: center;
-  padding: 18px 8px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  gap: 9px 4px;
+  padding: 18px 6px 2px;
+  overflow: visible;
 }
 
 .hand-cards .card-face + .card-face {
-  margin-left: clamp(-36px, -2.2vw, -20px);
+  margin-left: 0;
+}
+
+.hand-cards .card-face {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 66px;
+  aspect-ratio: 2 / 3;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .card-face {
@@ -874,13 +885,13 @@ button:focus-visible {
 }
 
 .card-face.is-selected {
-  z-index: auto;
+  z-index: 4;
   border-color: #f2cd70;
   box-shadow:
     inset 0 4px 0 #f2cd70,
     0 0 0 2px rgba(242, 205, 112, 0.34),
     0 10px 16px rgba(0, 0, 0, 0.26);
-  transform: translateY(-9px);
+  transform: translateY(-6px);
 }
 
 .card-face.is-selected::after {
@@ -911,7 +922,7 @@ button:focus-visible {
   }
 
   .card-face.is-selected:not(:disabled):hover {
-    transform: translateY(-10px);
+    transform: translateY(-7px);
   }
 }
 
@@ -2792,7 +2803,7 @@ button:focus-visible {
   }
 
   .game-table {
-    min-height: 635px;
+    min-height: 900px;
   }
 
   .game-table::after {
@@ -2823,11 +2834,14 @@ button:focus-visible {
   }
 
   .hand-cards {
-    justify-content: flex-start;
+    grid-template-columns: repeat(auto-fit, minmax(43px, 61px));
+    justify-content: center;
+    gap: 8px 4px;
+    padding-inline: 0;
   }
 
   .hand-cards .card-face + .card-face {
-    margin-left: -31px;
+    margin-left: 0;
   }
 
   .action-row {

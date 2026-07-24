@@ -14,6 +14,7 @@ import {
 } from "../lib/guandan/strategy";
 import {
   questionForSession,
+  normalizeTrainingText,
   trainingBank,
   trainingBankStats,
   trainingDifficultyMeta,
@@ -379,6 +380,39 @@ describe("分层训练题库", () => {
     }
   });
 
+  it("筑基题不再用同一问题和同一答案只替换数字", () => {
+    const conceptFingerprint = (text: string) =>
+      normalizeTrainingText(text)
+        .replace(
+          /(?:单张|对子|三张|三带二|顺子|三连对|钢板|同花顺|四王炸|炸弹|大小王|牌点)/g,
+          "牌型"
+        )
+        .replace(/(?:上家|下家|搭档|对手|玩家)/g, "角色");
+
+    for (const topic of trainingTopics) {
+      const questions = trainingBank.filter(
+        (question) =>
+          question.difficulty === "foundation" && question.topic === topic
+      );
+      expect(
+        new Set(questions.map((question) => conceptFingerprint(question.prompt)))
+          .size,
+        `${topic} 问法`
+      ).toBe(10);
+
+      if (topic !== "牌型识别") {
+        expect(
+          new Set(
+            questions.map((question) =>
+              conceptFingerprint(question.options[question.answer])
+            )
+          ).size,
+          `${topic} 答案原理`
+        ).toBeGreaterThanOrEqual(8);
+      }
+    }
+  });
+
   it("所有带牌型标注的题目都能由正式规则引擎验证", () => {
     const patternQuestions = trainingBank.filter(
       (question) => question.expectedPatternType
@@ -422,6 +456,19 @@ describe("分层训练题库", () => {
       );
       expect(new Set(ids).size).toBe(pool.length);
       expect(questionForSession(pool, pool.length, seed).id).toBe(ids[0]);
+    }
+  });
+
+  it("智能训练前十题轮换全部十个主题", () => {
+    const pool = trainingBank.filter(
+      (question) => question.difficulty === "foundation"
+    );
+    for (const seed of [0, 1, 41, 2026]) {
+      const firstTenTopics = Array.from(
+        { length: 10 },
+        (_, index) => questionForSession(pool, index, seed).topic
+      );
+      expect(new Set(firstTenTopics).size).toBe(trainingTopics.length);
     }
   });
 

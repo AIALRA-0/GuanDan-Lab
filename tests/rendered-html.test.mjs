@@ -39,6 +39,7 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(javascript, /为什么这样结算/);
   assert.match(javascript, /已知信息/);
   assert.match(javascript, /复盘本局/);
+  assert.match(javascript, /全部可见/);
   assert.match(css, /\.game-table/);
   assert.match(css, /\.vision-drawer/);
   assert.match(css, /\.history-list/);
@@ -49,6 +50,7 @@ test("生产产物包含完整中文训练平台", async () => {
   assert.match(css, /\.toolbar-setting/);
   assert.match(css, /\.teaching-takeaways/);
   assert.match(css, /\.card-face\.is-selected:{1,2}after/);
+  assert.match(css, /repeat\(auto-fit,minmax\(44px,61px\)\)/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(server, /vinext/);
   assert.doesNotMatch(

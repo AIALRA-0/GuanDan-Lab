@@ -890,7 +890,7 @@ export default function AcademyApp({ initialSeed }: AcademyAppProps) {
                   <div className="hand-meta">
                     <div>
                       <strong>你的手牌</strong>
-                      <span>{state.hands[0].length} 张</span>
+                      <span>{state.hands[0].length} 张 · 全部可见</span>
                     </div>
                     <span
                       className={`turn-pill ${
