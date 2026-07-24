@@ -127,7 +127,7 @@ for attempt in {1..120}; do
   if [[ "$attempt" -eq 120 ]]; then
     systemctl status --no-pager aialra-guandan.service >&2 || true
     journalctl -u aialra-guandan.service -n 100 --no-pager >&2 || true
-    exit 1
+    false
   fi
   sleep 1
 done
